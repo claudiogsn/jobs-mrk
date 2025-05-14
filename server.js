@@ -10,23 +10,26 @@ const { dispatchFinanceiro } = require('./workers/workerFinanceiro');
 const { DateTime } = require('luxon');
 
 const app = express();
+const router = express.Router();
+
 const PORT = process.env.PORT || 3005;
-const DEFAULT_GROUP_ID = process.env.GROUP_ID; // importante: string
+const DEFAULT_GROUP_ID = process.env.GROUP_ID;
 
-const formatDate = (iso) => {
-    return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-};
+// middleware
+router.use(express.json());
+router.use('/assets', express.static(path.join(__dirname, 'assets')));
 
-// middlewares
-app.use(express.json());
-app.use('/assets', express.static(path.join(__dirname, 'assets')));
-
-// favicon fallback
-app.get('/favicon.ico', (req, res) => {
+// favicon
+router.get('/favicon.ico', (req, res) => {
     res.sendFile(path.join(__dirname, 'assets/favicon.ico'));
 });
 
-// captura de logs do console.log
+// logo
+router.get('/logo.png', (req, res) => {
+    res.sendFile(path.join(__dirname, 'assets/logo.png'));
+});
+
+// console.log wrapper
 const liveLogs = [];
 const MAX_LOGS = 1000;
 const originalLog = console.log;
@@ -37,49 +40,44 @@ console.log = (...args) => {
     originalLog(msg);
 };
 
-app.get('/stdout', (req, res) => {
-    res.json(liveLogs); // sem reverse
-});
+const formatDate = (iso) => {
+    return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+};
 
-// === Rotas dos Workers ===
-app.post('/run/itemvenda', async (req, res) => {
+// === Workers ===
+router.post('/run/itemvenda', async (req, res) => {
     const group_id = req.body.group_id || DEFAULT_GROUP_ID;
     const dt_inicio = req.body.dt_inicio || DateTime.now().minus({ days: 1 }).toISODate();
     const dt_fim = req.body.dt_fim || dt_inicio;
 
     await processItemVenda({ group_id, dt_inicio, dt_fim });
-    res.send(
-        `✅ Worker - <strong>Importação da API Menew</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(dt_inicio)}`
-    );});
+    res.send(`✅ Worker - <strong>Importação da API Menew</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(dt_inicio)}`);
+});
 
-app.post('/run/consolidate', async (req, res) => {
+router.post('/run/consolidate', async (req, res) => {
     const group_id = req.body.group_id || DEFAULT_GROUP_ID;
     const dt_inicio = req.body.dt_inicio || DateTime.now().minus({ days: 1 }).toISODate();
     const dt_fim = req.body.dt_fim || dt_inicio;
 
     await processConsolidation({ group_id, dt_inicio, dt_fim });
-    res.send(
-        `✅ Worker - <strong>Sumarização das Vendas</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(dt_inicio)}`
-    );
+    res.send(`✅ Worker - <strong>Sumarização das Vendas</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(dt_inicio)}`);
 });
 
-app.post('/run/docsaida', async (req, res) => {
+router.post('/run/docsaida', async (req, res) => {
     const group_id = req.body.group_id || DEFAULT_GROUP_ID;
     const data = req.body.data || DateTime.now().minus({ days: 1 }).toISODate();
 
     await processDocSaida({ group_id, data });
-    res.send(
-        `✅ Worker - <strong>Baixa de Estoque</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(data)}`
-    );
+    res.send(`✅ Worker - <strong>Baixa de Estoque</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(data)}`);
 });
 
-app.post('/run/financeiro', async (req, res) => {
+router.post('/run/financeiro', async (req, res) => {
     await dispatchFinanceiro();
     res.send('✅ Worker Financeiro iniciado.');
 });
 
 // === Logs ===
-app.get('/logs', (req, res) => {
+router.get('/logs', (req, res) => {
     const logFilePath = path.resolve(__dirname, 'logs/api.log');
     fs.readFile(logFilePath, 'utf8', (err, data) => {
         if (err) return res.status(500).json({ error: 'Erro ao ler o arquivo de log.' });
@@ -88,26 +86,28 @@ app.get('/logs', (req, res) => {
     });
 });
 
+router.get('/stdout', (req, res) => {
+    res.json(liveLogs);
+});
+
 // === Autenticação ===
-app.post('/auth', (req, res) => {
+router.post('/auth', (req, res) => {
     const { usuario, senha } = req.body;
     const validUser = process.env.DASH_USER;
     const validPass = process.env.DASH_PASS;
 
-    if (usuario === validUser && senha === validPass) {
-        res.json({ success: true });
-    } else {
-        res.json({ success: false });
-    }
+    res.json({ success: usuario === validUser && senha === validPass });
 });
 
-// === Frontend ===
-app.get('/', (req, res) => {
+// === Página HTML ===
+router.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'views/dashboard.html'));
 });
 
+// ✅ aplica o router no prefixo /jobs
+app.use('/jobs', router);
+
+// inicia o servidor
 app.listen(PORT, () => {
-    console.log(`Servidor de logs rodando na porta ${PORT}`);
-    console.log(`===================================================`);
-    console.log(`Acesse http://localhost:${PORT}`);
+    console.log(`🟢 Servidor rodando em http://localhost:${PORT}/jobs`);
 });
