@@ -4,10 +4,6 @@ const { DateTime } = require('luxon');
 const axios = require('axios');
 const { callPHP, appendApiLog } = require('../utils/apiLogger');
 
-const groupId = parseInt(process.env.GROUP_ID);
-const dtinicio = DateTime.now().minus({ days: 1 }).toISODate();
-const dtfim = dtinicio;
-
 async function callMenew(methodPayload, token) {
     try {
         const res = await axios.post(process.env.MENEW_URL, methodPayload, {
@@ -51,7 +47,11 @@ async function loginMenew() {
     }
 }
 
-async function processItemVenda() {
+async function processItemVenda({ group_id, dt_inicio, dt_fim } = {}) {
+    const groupId = parseInt(group_id ?? process.env.GROUP_ID);
+    const dtinicio = dt_inicio ?? DateTime.now().minus({ days: 1 }).toISODate();
+    const dtfim = dt_fim ?? dtinicio;
+
     const unidades = await callPHP('getUnitsByGroup', { group_id: groupId });
 
     if (!Array.isArray(unidades) || unidades.length === 0) {
@@ -141,5 +141,8 @@ async function processItemVenda() {
 module.exports = { processItemVenda };
 
 if (require.main === module) {
-    processItemVenda();
+    const group_id = process.env.GROUP_ID;
+    const dt_inicio = DateTime.now().minus({ days: 1 }).toISODate();
+    const dt_fim = dt_inicio;
+    processItemVenda({ group_id, dt_inicio, dt_fim });
 }

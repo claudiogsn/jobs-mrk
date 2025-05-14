@@ -1,47 +1,51 @@
 require('dotenv').config();
 const { log } = require('../utils/logger');
-const { DateTime } = require('luxon');
 const { callPHP } = require('../utils/apiLogger');
+const { DateTime } = require('luxon');
 
-const groupId = process.env.GROUP_ID || '1';
-const startDate = DateTime.now().minus({ days: 1 }).toISODate();
-const endDate = startDate;
+async function processDocSaida({ group_id, data } = {}) {
+  const groupId = parseInt(group_id ?? process.env.GROUP_ID);
+  const dataRef = data ?? DateTime.now().minus({ days: 1 }).toISODate();
 
-async function processConsolidation() {
-  const inicio = Date.now();
+  const unidades = await callPHP('getUnitsByGroup', { group_id: groupId });
 
-  log(`🔄 Iniciando consolidação para grupo ${groupId}`, 'workerConsolidation');
-
-  const response = await callPHP('consolidateSalesByGroup', {
-    group_id: groupId,
-    dt_inicio: startDate,
-    dt_fim: endDate
-  });
-
-  const sucesso = response?.success === true || response?.status === 'success';
-
-  if (!sucesso) {
-    log(`❌ Falha na consolidação de vendas`, 'workerConsolidation');
+  if (!Array.isArray(unidades) || unidades.length === 0) {
+    log('⚠️ Nenhuma unidade encontrada.', 'workerCreateDocSaida');
     return;
   }
 
-  const final = Date.now();
-  const executionTime = ((final - inicio) / 60000).toFixed(2);
+  for (const unidade of unidades) {
+    const system_unit_id = unidade.system_unit_id;
 
-  await callPHP('registerJobExecution', {
-    nome_job: 'consolidate-sales-js',
-    system_unit_id: groupId,
-    custom_code: groupId,
-    inicio: DateTime.fromMillis(inicio).toFormat('yyyy-MM-dd HH:mm:ss'),
-    final: DateTime.fromMillis(final).toFormat('yyyy-MM-dd HH:mm:ss'),
-    execution_time: executionTime
-  });
+    try {
+      const result = await callPHP('importMovBySalesCons', { system_unit_id, data: dataRef });
 
-  log(`✅ Consolidação concluída em ${executionTime} minutos`, 'workerConsolidation');
+      const sucesso = result?.success === true || result?.status === 'success';
+
+      if (!sucesso) {
+        log(`❌ Falha ao importar movimentação para unidade ${system_unit_id}: ${result.message}`, 'workerCreateDocSaida');
+        continue;
+      }
+
+      await callPHP('registerJobExecution', {
+        group_id: groupId,
+        system_unit_id,
+        job_name: 'importMovBySalesCons',
+        parameters: JSON.stringify({ data: dataRef })
+      });
+
+      log(`✅ Unidade ${system_unit_id} processada com sucesso`, 'workerCreateDocSaida');
+
+    } catch (err) {
+      log(`❌ Erro inesperado ao processar unidade ${system_unit_id}: ${err.message}`, 'workerCreateDocSaida');
+    }
+  }
 }
 
-module.exports = { processConsolidation };
+module.exports = { processDocSaida };
 
 if (require.main === module) {
-  processConsolidation();
+  const group_id = process.env.GROUP_ID;
+  const data = DateTime.now().minus({ days: 1 }).toISODate();
+  processDocSaida({ group_id, data });
 }
