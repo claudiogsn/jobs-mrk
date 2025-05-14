@@ -97,7 +97,7 @@
         });
 
         try {
-            const res = await fetch('/auth', {
+            const res = await fetch('/jobs/auth', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ usuario, senha })
@@ -192,7 +192,7 @@
 
     async function loadStdout() {
         try {
-            const res = await fetch('/stdout');
+            const res = await fetch('/jobs/stdout');
             const logs = await res.json();
             const stdoutEl = document.getElementById('stdout');
             stdoutEl.innerText = logs.join('\n');
@@ -207,7 +207,7 @@
 
     async function loadLogs() {
         try {
-            const res = await fetch('/logs');
+            const res = await fetch('/jobs/logs');
             const logs = await res.json();
             document.getElementById('logsDisplay').innerText = logs.join('\n');
         } catch (err) {
@@ -220,7 +220,7 @@
 
     async function loadLogs() {
         try {
-            const res = await fetch('/logs');
+            const res = await fetch('/jobs/logs');
             const logs = await res.json();
             document.getElementById('logsDisplay').innerText = logs.join('\n');
         } catch (err) {
