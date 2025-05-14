@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/x-icon" href="./assets/favicon.ico" />
+    <title>Portal Meraki - Dashboard Workers</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="bg-white text-gray-800 font-sans">
+
+<!-- Tela de Login -->
+<div id="loginScreen" class="fixed inset-0 bg-white flex items-center justify-center z-50">
+    <div class="bg-gray-100 border rounded shadow-lg p-6 w-full max-w-sm">
+        <h2 class="text-xl font-semibold mb-4 text-center">Acesso Restrito</h2>
+        <input type="text" id="login_user" placeholder="Usuário" class="w-full border p-2 rounded mb-3" />
+        <input type="password" id="login_pass" placeholder="Senha" class="w-full border p-2 rounded mb-3" />
+        <button onclick="autenticar()" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Entrar</button>
+    </div>
+</div>
+
+<nav class="bg-blue-600 text-white shadow p-4">
+    <div class="container mx-auto flex justify-between items-center">
+        <h1 class="text-xl font-semibold">Portal Meraki - Workers Dashboard - Integração Externa</h1>
+        <div class="space-x-4">
+            <button onclick="showSection('logs')" class="hover:underline">Logs</button>
+            <button onclick="showSection('processamento')" class="hover:underline">Processamento</button>
+        </div>
+    </div>
+</nav>
+
+<main class="container mx-auto p-6 hidden" id="mainContent">
+    <!-- Logs -->
+    <section id="logs" class="hidden">
+        <h2 class="text-2xl font-semibold mb-4">Logs em Tempo Real</h2>
+        <div class="bg-gray-100 border border-gray-300 rounded p-4 h-[70vh] overflow-y-auto" id="logsDisplay">
+            Carregando logs...
+        </div>
+    </section>
+
+    <section id="processamento">
+        <h2 class="text-2xl font-semibold mb-4">Executar Workers</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <!-- Worker ItemVenda -->
+            <div class="border rounded p-3 shadow">
+                <h3 class="font-bold mb-2">1 - Buscar vendas API Menew</h3>
+                <input id="itemvenda_group" class="input" placeholder="group_id (opcional)" />
+                <input id="itemvenda_inicio" class="input" type="date" />
+                <input id="itemvenda_fim" class="input" type="date" />
+                <button onclick="runWorker('itemvenda')" class="btn">Executar</button>
+            </div>
+
+            <!-- Worker Consolidate -->
+            <div class="border rounded p-3 shadow">
+                <h3 class="font-bold mb-2">2 - Sumarizar as vendas</h3>
+                <input id="consolidate_group" class="input" placeholder="group_id (opcional)" />
+                <input id="consolidate_inicio" class="input" type="date" />
+                <input id="consolidate_fim" class="input" type="date" />
+                <button onclick="runWorker('consolidate')" class="btn">Executar</button>
+            </div>
+
+            <!-- Worker DocSaida -->
+            <div class="border rounded p-3 shadow">
+                <h3 class="font-bold mb-2">3 - Realizar Baixa de Estoque</h3>
+                <input id="docsaida_group" class="input" placeholder="group_id (opcional)" />
+                <input id="docsaida_data" class="input" type="date" />
+                <button onclick="runWorker('docsaida')" class="btn">Executar</button>
+            </div>
+        </div>
+
+        <!-- Logs abaixo dos 3 blocos -->
+        <div class="border rounded p-4 shadow">
+            <h3 class="font-bold mb-2">🖨️ Console.log em tempo real</h3>
+            <div id="stdout" class="bg-gray-100 h-[250px] overflow-y-auto text-sm font-mono p-2 border rounded"></div>
+        </div>
+    </section>
+
+    <!-- Rodapé com logo -->
+    <div class="mt-8 text-center">
+        <img src="./assets/logo.png" alt="Logo Meraki" class="mx-auto w-[30%] max-w-xs opacity-80" />
+    </div>
+</main>
+
+<script>
+    async function autenticar() {
+        const usuario = document.getElementById('login_user').value;
+        const senha = document.getElementById('login_pass').value;
+
+        const loading = Swal.fire({
+            title: 'Autenticando...',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        try {
+            const res = await fetch('/auth', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ usuario, senha })
+            });
+            const data = await res.json();
+            Swal.close();
+
+            if (data.success) {
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('mainContent').classList.remove('hidden');
+            } else {
+                Swal.fire('Erro', 'Usuário ou senha inválidos.', 'error');
+            }
+        } catch {
+            Swal.close();
+            Swal.fire('Erro', 'Falha ao autenticar.', 'error');
+        }
+    }
+
+    async function runWorker(type) {
+        const payload = {};
+        let group_id = '', dt_inicio = '', dt_fim = '', data = '';
+        const hoje = new Date();
+        const ontemISO = new Date(hoje.setDate(hoje.getDate() - 1)).toISOString().split('T')[0];
+
+        if (type === 'itemvenda') {
+            group_id = document.getElementById('itemvenda_group').value;
+            dt_inicio = document.getElementById('itemvenda_inicio').value;
+            dt_fim = document.getElementById('itemvenda_fim').value;
+            payload.group_id = group_id;
+            payload.dt_inicio = dt_inicio;
+            payload.dt_fim = dt_fim;
+        } else if (type === 'consolidate') {
+            group_id = document.getElementById('consolidate_group').value;
+            dt_inicio = document.getElementById('consolidate_inicio').value;
+            dt_fim = document.getElementById('consolidate_fim').value;
+            payload.group_id = group_id;
+            payload.dt_inicio = dt_inicio;
+            payload.dt_fim = dt_fim;
+        } else if (type === 'docsaida') {
+            group_id = document.getElementById('docsaida_group').value;
+            data = document.getElementById('docsaida_data').value;
+            payload.group_id = group_id;
+            payload.data = data;
+        }
+
+        const usarPadrao = !group_id && !dt_inicio && !dt_fim && !data;
+        const formatarData = (dataISO) => {
+            const d = new Date(dataISO);
+            return d.toLocaleDateString('pt-BR');
+        };
+
+        const confirmacao = await Swal.fire({
+            icon: 'question',
+            title: 'Deseja continuar?',
+            html: usarPadrao
+                ? `Nenhum parâmetro foi informado. Será usado o padrão:<br><b>Grupo</b>: 1<br><b>Data</b>: ${formatarData(ontemISO)}`
+                : `Deseja realmente executar este worker com os parâmetros informados?<br><b>Grupo</b>: ${group_id || '1'}<br><b>Data</b>: ${formatarData(data || dt_inicio)}`,
+            showCancelButton: true,
+            confirmButtonText: 'Sim, executar',
+            cancelButtonText: 'Cancelar'
+        });
+
+        if (!confirmacao.isConfirmed) return;
+
+        const loading = Swal.fire({
+            title: 'Executando...',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        try {
+            const res = await fetch(`/run/${type}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const text = await res.text();
+            Swal.close();
+            Swal.fire('Finalizado', text, 'success');
+        } catch (error) {
+            Swal.close();
+            Swal.fire('Erro', 'Falha ao executar o worker.', 'error');
+        }
+    }
+
+    function showSection(id) {
+        document.querySelectorAll('main > section').forEach(sec => sec.classList.add('hidden'));
+        document.getElementById(id).classList.remove('hidden');
+        if (id === 'logs') loadLogs();
+    }
+
+    async function loadStdout() {
+        try {
+            const res = await fetch('/stdout');
+            const logs = await res.json();
+            const stdoutEl = document.getElementById('stdout');
+            stdoutEl.innerText = logs.join('\n');
+            stdoutEl.scrollTop = stdoutEl.scrollHeight;
+        } catch {
+            document.getElementById('stdout').innerText = 'Erro ao carregar saída do console.';
+        }
+    }
+
+    setInterval(loadStdout, 3000);
+    loadStdout();
+
+    async function loadLogs() {
+        try {
+            const res = await fetch('/logs');
+            const logs = await res.json();
+            document.getElementById('logsDisplay').innerText = logs.join('\n');
+        } catch (err) {
+            document.getElementById('logsDisplay').innerText = 'Erro ao carregar logs.';
+        }
+    }
+
+    setInterval(loadStdout, 3000);
+    loadStdout();
+
+    async function loadLogs() {
+        try {
+            const res = await fetch('/logs');
+            const logs = await res.json();
+            document.getElementById('logsDisplay').innerText = logs.join('\n');
+        } catch (err) {
+            document.getElementById('logsDisplay').innerText = 'Erro ao carregar logs.';
+        }
+    }
+
+    document.querySelectorAll('.input').forEach(i => i.classList.add('w-full', 'border', 'p-2', 'mb-2', 'rounded'));
+    document.querySelectorAll('.btn').forEach(b => b.classList.add('bg-blue-600', 'text-white', 'px-4', 'py-2', 'rounded', 'hover:bg-blue-700'));
+</script>
+
+</body>
+</html>
