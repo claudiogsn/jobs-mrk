@@ -15,19 +15,19 @@ cron.schedule('0 4 * * *', () => {
     processItemVenda();
 });
 
-// Às 04:30
+// Às 04:30.
 cron.schedule('30 4 * * *', () => {
     console.log('🚀 Executando processConsolidation (04:30)');
     processConsolidation();
 });
 
-// Às 05:00
+// Às 05:00.
 cron.schedule('0 5 * * *', () => {
     console.log('🚀 Executando processDocSaida (05:00)');
     processDocSaida();
 });
 
-// Às 05:30
+// Às 05:30.
 cron.schedule('30 5 * * *', () => {
     console.log('🚀 Iniciando dispatchFinanceiro (05:30)');
     dispatchFinanceiro();
