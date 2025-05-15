@@ -59,6 +59,13 @@ const ajustarHorarioMenew = (str, tipo = 'datetime') => {
     return tipo === 'date' ? clean.substring(0, 10) : clean;
 };
 
+function adicionarSufixoSequencial(meios) {
+    return meios.map((mp, index) => {
+        const novoId = `${mp.id}${index + 1}`;
+        return { ...mp, id: novoId };
+    });
+}
+
 async function processMovimentoCaixa({ group_id, dt_inicio, dt_fim } = {}) {
     const groupId = parseInt(group_id ?? process.env.GROUP_ID);
     const dataInicio = DateTime.fromISO(dt_inicio ?? DateTime.local().minus({ days: 1 }).toISODate());
@@ -157,7 +164,7 @@ async function processMovimentoCaixa({ group_id, dt_inicio, dt_fim } = {}) {
                 dataAbertura: ajustarHorarioMenew(mov.dataAbertura),
                 dataFechamento: ajustarHorarioMenew(mov.dataFechamento),
                 dataContabil: ajustarHorarioMenew(mov.dataContabil, 'date'),
-                meiosPagamento: mov.meiosPagamento,
+                meiosPagamento: adicionarSufixoSequencial(mov.meiosPagamento),
                 consumidores: mov.consumidores
             }));
 
