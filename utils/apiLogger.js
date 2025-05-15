@@ -22,7 +22,7 @@ function appendApiLog(content) {
 async function callPHP(method, data) {
     const payload = { method, data };
 
-    if (['itemVendaPayload', 'persistSales'].includes(method)) {
+    if (['itemVendaPayload', 'persistSales','persistMovimentoCaixa'].includes(method)) {
         appendApiLog(`➡️ REQUEST: ${method} - Grande Demais`);
     } else {
         appendApiLog(`➡️ REQUEST: ${method} - ${JSON.stringify(payload)}`);

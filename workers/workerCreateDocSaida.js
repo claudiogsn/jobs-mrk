@@ -44,7 +44,7 @@ async function processDocSaida({ group_id, data } = {}) {
 
 module.exports = { processDocSaida };
 
-// Execução direta (ex: via cron ou terminal)
+
 if (require.main === module) {
   const group_id = process.env.GROUP_ID;
   const data = DateTime.now().minus({ days: 1 }).toISODate();

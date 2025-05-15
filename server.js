@@ -5,6 +5,7 @@ const express = require('express');
 const { getLogs } = require('./utils/logger');
 const { processItemVenda } = require('./workers/workerItemVenda');
 const { processConsolidation } = require('./workers/workerConsolidateSales');
+const { processMovimentoCaixa } = require('./workers/workerMovimentoCaixa');
 const { processDocSaida } = require('./workers/workerCreateDocSaida');
 const { dispatchFinanceiro } = require('./workers/workerFinanceiro');
 const { DateTime } = require('luxon');
@@ -45,6 +46,15 @@ const formatDate = (iso) => {
 };
 
 // === Workers ===
+router.post('/run/movimentocaixa', async (req, res) => {
+    const group_id = req.body.group_id || DEFAULT_GROUP_ID;
+    const dt_inicio = req.body.dt_inicio || DateTime.now().minus({ days: 1 }).toISODate();
+    const dt_fim = req.body.dt_fim || dt_inicio;
+
+    await processMovimentoCaixa({ group_id, dt_inicio, dt_fim });
+    res.send(`✅ Worker - <strong>Movimento de Caixa</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(dt_inicio)}`);
+});
+
 router.post('/run/itemvenda', async (req, res) => {
     const group_id = req.body.group_id || DEFAULT_GROUP_ID;
     const dt_inicio = req.body.dt_inicio || DateTime.now().minus({ days: 1 }).toISODate();
