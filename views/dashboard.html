@@ -119,42 +119,58 @@
     async function runWorker(type) {
         const payload = {};
         let group_id = '', dt_inicio = '', dt_fim = '', data = '';
-        const hoje = new Date();
-        const ontemISO = new Date(hoje.setDate(hoje.getDate() - 1)).toISOString().split('T')[0];
 
         if (type === 'itemvenda') {
             group_id = document.getElementById('itemvenda_group').value;
             dt_inicio = document.getElementById('itemvenda_inicio').value;
             dt_fim = document.getElementById('itemvenda_fim').value;
+
+            if (!dt_inicio || !dt_fim) {
+                Swal.fire('Atenção', 'Preencha as datas de início e fim.', 'warning');
+                return;
+            }
+
             payload.group_id = group_id;
             payload.dt_inicio = dt_inicio;
             payload.dt_fim = dt_fim;
+
         } else if (type === 'consolidate') {
             group_id = document.getElementById('consolidate_group').value;
             dt_inicio = document.getElementById('consolidate_inicio').value;
             dt_fim = document.getElementById('consolidate_fim').value;
+
+            if (!dt_inicio || !dt_fim) {
+                Swal.fire('Atenção', 'Preencha as datas de início e fim.', 'warning');
+                return;
+            }
+
             payload.group_id = group_id;
             payload.dt_inicio = dt_inicio;
             payload.dt_fim = dt_fim;
+
         } else if (type === 'docsaida') {
             group_id = document.getElementById('docsaida_group').value;
             data = document.getElementById('docsaida_data').value;
+
+            if (!data) {
+                Swal.fire('Atenção', 'Preencha a data para baixa de estoque.', 'warning');
+                return;
+            }
+
             payload.group_id = group_id;
             payload.data = data;
         }
 
-        const usarPadrao = !group_id && !dt_inicio && !dt_fim && !data;
         const formatarData = (dataISO) => {
-            const d = new Date(dataISO);
-            return d.toLocaleDateString('pt-BR');
+            if (!dataISO) return '';
+            const [ano, mes, dia] = dataISO.split('-');
+            return `${dia}/${mes}/${ano}`;
         };
 
         const confirmacao = await Swal.fire({
             icon: 'question',
             title: 'Deseja continuar?',
-            html: usarPadrao
-                ? `Nenhum parâmetro foi informado. Será usado o padrão:<br><b>Grupo</b>: 1<br><b>Data</b>: ${formatarData(ontemISO)}`
-                : `Deseja realmente executar este worker com os parâmetros informados?<br><b>Grupo</b>: ${group_id || '1'}<br><b>Data</b>: ${formatarData(data || dt_inicio)}`,
+            html: `Deseja realmente executar este worker com os parâmetros informados?<br><b>Grupo</b>: ${group_id || '1'}<br><b>Data</b>: ${formatarData(data || dt_inicio)}`,
             showCancelButton: true,
             confirmButtonText: 'Sim, executar',
             cancelButtonText: 'Cancelar'

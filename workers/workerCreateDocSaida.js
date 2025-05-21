@@ -18,6 +18,7 @@ async function processDocSaida({ group_id, data } = {}) {
     const system_unit_id = unidade.system_unit_id;
 
     try {
+      const inicio = Date.now();
       const result = await callPHP('importMovBySalesCons', { system_unit_id, data: dataRef });
 
       const sucesso = result?.success === true || result?.status === 'success';
@@ -26,12 +27,13 @@ async function processDocSaida({ group_id, data } = {}) {
         log(`❌ Falha ao importar movimentação para unidade ${system_unit_id}: ${result.message}`, 'workerCreateDocSaida');
         continue;
       }
-
+      const final = Date.now();
       await callPHP('registerJobExecution', {
-        group_id: groupId,
-        system_unit_id,
-        job_name: 'importMovBySalesCons',
-        parameters: JSON.stringify({ data: dataRef })
+        nome_job: 'baixa-estoque-js',
+        system_unit_id: system_unit_id,
+        custom_code: unidade.custom_code,
+        inicio: DateTime.fromMillis(inicio).toFormat('yyyy-MM-dd HH:mm:ss'),
+        final: DateTime.fromMillis(final).toFormat('yyyy-MM-dd HH:mm:ss')
       });
 
       log(`✅ Unidade ${system_unit_id} processada com sucesso`, 'workerCreateDocSaida');
@@ -42,11 +44,18 @@ async function processDocSaida({ group_id, data } = {}) {
   }
 }
 
-module.exports = { processDocSaida };
+async function ExecuteJobDocSaida() {
+  const group_id = process.env.GROUP_ID;
+  const hoje = DateTime.local();
+  const day = hoje.minus({ days: 1 });
 
+  console.log(`⏱️ Iniciando processDocSaida de ${day} às ${hoje.toFormat('HH:mm:ss')}`);
+  await processDocSaida({ group_id, day });
+  console.log(`✅ Job finalizado às ${DateTime.local().toFormat('HH:mm:ss')}`);
+}
+
+module.exports = { processDocSaida, ExecuteJobDocSaida };
 
 if (require.main === module) {
-  const group_id = process.env.GROUP_ID;
-  const data = DateTime.now().minus({ days: 1 }).toISODate();
-  processDocSaida({ group_id, data });
+    ExecuteJobDocSaida();
 }

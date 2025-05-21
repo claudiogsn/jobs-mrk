@@ -138,11 +138,22 @@ async function processItemVenda({ group_id, dt_inicio, dt_fim } = {}) {
     }
 }
 
-module.exports = { processItemVenda };
+
+async function ExecuteJobItemVenda() {
+    const group_id = process.env.GROUP_ID;
+    const hoje = DateTime.local();
+    const ontem = hoje.minus({ days: 1 });
+
+    const dt_inicio = ontem.toFormat('yyyy-MM-dd');
+    const dt_fim = hoje.toFormat('yyyy-MM-dd');
+
+    console.log(`⏱️ Iniciando processItemVenda de ${dt_inicio} até ${dt_fim} às ${hoje.toFormat('HH:mm:ss')}`);
+    await processItemVenda({ group_id, dt_inicio, dt_fim });
+    console.log(`✅ Job finalizado às ${DateTime.local().toFormat('HH:mm:ss')}`);
+}
+
+module.exports = { processItemVenda, ExecuteJobItemVenda };
 
 if (require.main === module) {
-    const group_id = process.env.GROUP_ID;
-    const dt_inicio = DateTime.now().minus({ days: 1 }).toISODate();
-    const dt_fim = dt_inicio;
-    processItemVenda({ group_id, dt_inicio, dt_fim });
+    ExecuteJobItemVenda();
 }

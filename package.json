@@ -1,20 +1,21 @@
 {
-  "name": "php-workers-integration",
+  "name": "mrk-workers-integration",
   "version": "1.0.0",
-  "description": "Workers para rodar scripts PHP convertidos em Node.js",
+  "description": "Workers para integração com o sistemas externos ao Portal MRK",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "worker:financeiro": "node workers/workerFinanceiro.js",
     "worker:consolidate": "node workers/workerConsolidateSales.js",
     "worker:docsaida": "node workers/workerCreateDocSaida.js",
-    "worker:itemvenda": "node workers/workerItemVenda.js"
+    "worker:itemvenda": "node workers/workerItemVenda.js",
+    "worker:caixa": "node workers/workerMovimentoCaixa.js"
   },
   "dependencies": {
     "axios": "^1.9.0",
     "dotenv": "^16.3.1",
     "express": "^5.1.0",
     "luxon": "^3.6.1",
-    "node-cron": "^4.0.5"
+    "node-cron": "^4.0.6"
   }
 }

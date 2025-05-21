@@ -41,41 +41,52 @@ console.log = (...args) => {
     originalLog(msg);
 };
 
-const formatDate = (iso) => {
-    return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+const formatDate = (dataISO) => {
+    if (!dataISO) return '';
+    const [ano, mes, dia] = dataISO.split('-');
+    return `${dia}/${mes}/${ano}`;
 };
 
 // === Workers ===
 router.post('/run/movimentocaixa', async (req, res) => {
-    const group_id = req.body.group_id || DEFAULT_GROUP_ID;
-    const dt_inicio = req.body.dt_inicio || DateTime.now().minus({ days: 1 }).toISODate();
-    const dt_fim = req.body.dt_fim || dt_inicio;
+    const { group_id, dt_inicio, dt_fim } = req.body;
+
+    if (!group_id || !dt_inicio || !dt_fim) {
+        return res.status(400).send('❌ Parâmetros obrigatórios ausentes: group_id, dt_inicio, dt_fim');
+    }
 
     await processMovimentoCaixa({ group_id, dt_inicio, dt_fim });
-    res.send(`✅ Worker - <strong>Movimento de Caixa</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(dt_inicio)}`);
+    res.send(`✅ Worker - <strong>Movimento de Caixa</strong> executado com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(dt_inicio)} até ${formatDate(dt_fim)}`);
 });
 
 router.post('/run/itemvenda', async (req, res) => {
-    const group_id = req.body.group_id || DEFAULT_GROUP_ID;
-    const dt_inicio = req.body.dt_inicio || DateTime.now().minus({ days: 1 }).toISODate();
-    const dt_fim = req.body.dt_fim || dt_inicio;
+    const { group_id, dt_inicio, dt_fim } = req.body;
+
+    if (!group_id || !dt_inicio || !dt_fim) {
+        return res.status(400).send('❌ Parâmetros obrigatórios ausentes: group_id, dt_inicio, dt_fim');
+    }
 
     await processItemVenda({ group_id, dt_inicio, dt_fim });
-    res.send(`✅ Worker - <strong>Importação da API Menew</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(dt_inicio)}`);
+    res.send(`✅ Worker - <strong>Importação da API Menew</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(dt_inicio)} até ${formatDate(dt_fim)}`);
 });
 
 router.post('/run/consolidate', async (req, res) => {
-    const group_id = req.body.group_id || DEFAULT_GROUP_ID;
-    const dt_inicio = req.body.dt_inicio || DateTime.now().minus({ days: 1 }).toISODate();
-    const dt_fim = req.body.dt_fim || dt_inicio;
+    const { group_id, dt_inicio, dt_fim } = req.body;
+
+    if (!group_id || !dt_inicio || !dt_fim) {
+        return res.status(400).send('❌ Parâmetros obrigatórios ausentes: group_id, dt_inicio, dt_fim');
+    }
 
     await processConsolidation({ group_id, dt_inicio, dt_fim });
-    res.send(`✅ Worker - <strong>Sumarização das Vendas</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(dt_inicio)}`);
+    res.send(`✅ Worker - <strong>Sumarização das Vendas</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(dt_inicio)} até ${formatDate(dt_fim)}`);
 });
 
 router.post('/run/docsaida', async (req, res) => {
-    const group_id = req.body.group_id || DEFAULT_GROUP_ID;
-    const data = req.body.data || DateTime.now().minus({ days: 1 }).toISODate();
+    const { group_id, data } = req.body;
+
+    if (!group_id || !data) {
+        return res.status(400).send('❌ Parâmetros obrigatórios ausentes: group_id, data');
+    }
 
     await processDocSaida({ group_id, data });
     res.send(`✅ Worker - <strong>Baixa de Estoque</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(data)}`);

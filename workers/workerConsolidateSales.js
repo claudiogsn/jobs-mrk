@@ -40,8 +40,21 @@ async function processConsolidation() {
   log(`✅ Consolidação concluída em ${executionTime} minutos`, 'workerConsolidation');
 }
 
-module.exports = { processConsolidation };
+async function ExecuteJobConsolidation() {
+  const group_id = process.env.GROUP_ID;
+  const hoje = DateTime.local();
+  const ontem = hoje.minus({ days: 1 });
+
+  const dt_inicio = ontem.toFormat('yyyy-MM-dd');
+  const dt_fim = hoje.toFormat('yyyy-MM-dd');
+
+  console.log(`⏱️ Iniciando job de ${dt_inicio} até ${dt_fim} às ${hoje.toFormat('HH:mm:ss')}`);
+  await processConsolidation({ group_id, dt_inicio, dt_fim });
+  console.log(`✅ Job finalizado às ${DateTime.local().toFormat('HH:mm:ss')}`);
+}
+
+module.exports = { processConsolidation, ExecuteJobConsolidation };
 
 if (require.main === module) {
-  processConsolidation();
+    ExecuteJobConsolidation();
 }
