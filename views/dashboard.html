@@ -43,9 +43,9 @@
     <section id="processamento">
         <h2 class="text-2xl font-semibold mb-4">Executar Workers</h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <!-- Worker ItemVenda -->
-            <div class="border rounded p-3 shadow">
+            <div class="border rounded p-6 shadow">
                 <h3 class="font-bold mb-2">1 - Buscar vendas API Menew</h3>
                 <input id="itemvenda_group" class="input" placeholder="group_id (opcional)" />
                 <input id="itemvenda_inicio" class="input" type="date" />
@@ -54,7 +54,7 @@
             </div>
 
             <!-- Worker Consolidate -->
-            <div class="border rounded p-3 shadow">
+            <div class="border rounded p-6 shadow">
                 <h3 class="font-bold mb-2">2 - Sumarizar as vendas</h3>
                 <input id="consolidate_group" class="input" placeholder="group_id (opcional)" />
                 <input id="consolidate_inicio" class="input" type="date" />
@@ -63,11 +63,20 @@
             </div>
 
             <!-- Worker DocSaida -->
-            <div class="border rounded p-3 shadow">
+            <div class="border rounded p-6 shadow">
                 <h3 class="font-bold mb-2">3 - Realizar Baixa de Estoque</h3>
                 <input id="docsaida_group" class="input" placeholder="group_id (opcional)" />
                 <input id="docsaida_data" class="input" type="date" />
                 <button onclick="runWorker('docsaida')" class="btn">Executar</button>
+            </div>
+
+            <!-- Worker MovimentoCaixa -->
+            <div class="border rounded p-6 shadow">
+                <h3 class="font-bold mb-2">4 - Movimento de Caixa</h3>
+                <input id="movcaixa_group" class="input" placeholder="group_id (opcional)" />
+                <input id="movcaixa_inicio" class="input" type="date" />
+                <input id="movcaixa_fim" class="input" type="date" />
+                <button onclick="runWorker('movimentocaixa')" class="btn">Executar</button>
             </div>
         </div>
 
@@ -159,7 +168,20 @@
 
             payload.group_id = group_id;
             payload.data = data;
+        } else if (type === 'movimentocaixa') {
+        group_id = document.getElementById('movcaixa_group').value;
+        dt_inicio = document.getElementById('movcaixa_inicio').value;
+        dt_fim = document.getElementById('movcaixa_fim').value;
+
+        if (!dt_inicio || !dt_fim) {
+            Swal.fire('Atenção', 'Preencha as datas de início e fim.', 'warning');
+            return;
         }
+
+        payload.group_id = group_id;
+        payload.dt_inicio = dt_inicio;
+        payload.dt_fim = dt_fim;
+    }
 
         const formatarData = (dataISO) => {
             if (!dataISO) return '';
