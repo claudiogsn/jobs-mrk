@@ -5,6 +5,8 @@ const { ExecuteJobCaixa } = require('./workers/workerMovimentoCaixa');
 const { ExecuteJobItemVenda } = require('./workers/workerItemVenda');
 const {ExecuteJobConsolidation} = require("./workers/workerConsolidateSales");
 const {ExecuteJobDocSaida} = require("./workers/workerCreateDocSaida");
+const {processQueueWhatsapp} = require('./workers/workerWhatsapp');
+const {gerarFilaWhatsapp} = require('./utils/gerarFilaWhatsapp');
 
 console.log('🕓 Agendador iniciado. Esperando horários programados...');
 
@@ -37,5 +39,14 @@ cron.schedule('00 5 * * *', () => {
 }, {
     timezone: 'America/Sao_Paulo'
 });
+
+cron.schedule('00 7 * * *', () => {
+    console.log(`🚀 Executando disparo para faturamento ${new Date().toLocaleTimeString()}`);
+    gerarFilaWhatsapp();
+}, {
+    timezone: 'America/Sao_Paulo'
+});
+
+processQueueWhatsapp();
 
 
