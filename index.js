@@ -6,7 +6,7 @@ const { ExecuteJobItemVenda } = require('./workers/workerItemVenda');
 const {ExecuteJobConsolidation} = require("./workers/workerConsolidateSales");
 const {ExecuteJobDocSaida} = require("./workers/workerCreateDocSaida");
 const {processQueueWhatsapp} = require('./workers/workerWhatsapp');
-const {gerarFilaWhatsapp} = require('./utils/gerarFilaWhatsapp');
+const {gerarFilaWhatsapp} = require('./workers/WorkerDisparoFaturamento');
 
 console.log('🕓 Agendador iniciado. Esperando horários programados...');
 
