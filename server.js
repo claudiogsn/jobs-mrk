@@ -9,6 +9,7 @@ const { processMovimentoCaixa } = require('./workers/workerMovimentoCaixa');
 const { processDocSaida } = require('./workers/workerCreateDocSaida');
 const { dispatchFinanceiro } = require('./workers/workerFinanceiro');
 const { DateTime } = require('luxon');
+const {gerarFilaWhatsapp} = require("./workers/WorkerDisparoFaturamento");
 
 const app = express();
 const router = express.Router();
@@ -95,6 +96,11 @@ router.post('/run/docsaida', async (req, res) => {
 router.post('/run/financeiro', async (req, res) => {
     await dispatchFinanceiro();
     res.send('✅ Worker Financeiro iniciado.');
+});
+
+router.get('/run/wpp', async (req, res) => {
+    await gerarFilaWhatsapp();
+    res.send('✅ Worker Disparo Fatuiramento.');
 });
 
 // === Logs ===
