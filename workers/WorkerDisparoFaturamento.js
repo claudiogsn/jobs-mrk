@@ -14,7 +14,7 @@ const sqs = new SQSClient({
 const DESTINOS = [
     { nome: 'Claudio', telefone: '5583999275543' }
     ,{ nome: 'Paula', telefone: '5571991248941' }
-    //,{ nome: 'Edno', telefone: '5571992649337' }
+    ,{ nome: 'Edno', telefone: '5571992649337' }
 ];
 
 function formatCurrency(value) {
