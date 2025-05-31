@@ -115,14 +115,17 @@ async function gerarFilaWhatsapp() {
 
 
         corpoMensagem +=
-            `📍 *${unitName}*
-💰 *Bruto:* *${formatCurrency(resumoOntem.faturamento_bruto)}* [${formatCurrency(resumoSemanaPassada.faturamento_bruto)}; ${variacaoFaturamentoBruto}]
-💵 *Líquido:* *${formatCurrency(resumoOntem.faturamento_liquido)}* [${formatCurrency(resumoSemanaPassada.faturamento_liquido)}; ${variacaoFaturamentoLiquido}]
-🎟 *Descontos:* *${formatCurrency(resumoOntem.descontos)}* [${formatCurrency(resumoSemanaPassada.descontos)}; ${variacaoDescontos}]
-🧾 *Taxa Serviço:* *${formatCurrency(resumoOntem.taxa_servico)}* [${formatCurrency(resumoSemanaPassada.taxa_servico)}; ${variacaoTaxaServico}]
-👥 *Clientes:* *${resumoOntem.numero_clientes}* [${resumoSemanaPassada.numero_clientes}; ${variacaoNumeroClientes}]
-📈 *Ticket Médio:* *${formatCurrency(resumoOntem.ticket_medio)}* [${formatCurrency(resumoSemanaPassada.ticket_medio)}; ${variacaoTicketMedio}]
+            `📍 ${unitName}
+💰 Bruto: ${formatCurrency(resumoOntem.faturamento_bruto)} [vs ${formatCurrency(resumoSemanaPassada.faturamento_bruto)}]
+💵 Líquido: ${formatCurrency(resumoOntem.faturamento_liquido)} [Vs ${formatCurrency(resumoSemanaPassada.faturamento_liquido)}]
+🗒 N Pedidos: ${resumoOntem.numero_pedidos} [Vs ${resumoSemanaPassada.numero_pedidos}]
+🎟 Descontos: ${formatCurrency(resumoOntem.descontos)} [Vs ${formatCurrency(resumoSemanaPassada.descontos)}]
+🧾 Taxa Serviço: ${formatCurrency(resumoOntem.taxa_servico)} [Vs ${formatCurrency(resumoSemanaPassada.taxa_servico)}]
+👥 Clientes: ${resumoOntem.numero_clientes} [Vs ${resumoSemanaPassada.numero_clientes}]
+📈 Ticket Médio: ${formatCurrency(resumoOntem.ticket_medio)} [Vs ${formatCurrency(resumoSemanaPassada.ticket_medio)}]
 
+Variação de Faturamento Liq.: ${calcularVariacao(resumoOntem.faturamento_liquido, resumoSemanaPassada.faturamento_liquido)}
+Variação de N.pedidos: ${calcularVariacao(resumoOntem.numero_pedidos, resumoSemanaPassada.numero_pedidos)}
 ━━━━━━━━━━━━━━━━━━━
 `;
 
