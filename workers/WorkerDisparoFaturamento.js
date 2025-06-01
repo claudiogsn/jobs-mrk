@@ -13,9 +13,9 @@ const sqs = new SQSClient({
 
 const DESTINOS = [
     { nome: 'Claudio', telefone: '5583999275543' }
-    ,{ nome: 'Paula', telefone: '5571991248941' }
-    ,{ nome: 'Edno', telefone: '5571992649337' }
-    ,{nome: 'Pedro', telefone: '5571992501052' }
+    //,{ nome: 'Paula', telefone: '5571991248941' }
+    //,{ nome: 'Edno', telefone: '5571992649337' }
+    //,{nome: 'Pedro', telefone: '5571992501052' }
 ];
 
 function formatCurrency(value) {
@@ -65,7 +65,7 @@ async function gerarFilaWhatsapp() {
         return;
     }
 
-    let corpoMensagem = `Segue os dados de faturamento do dia ${dataRef} por loja:\n\n━━━━━━━━━━━━━━━━━━━\n`;
+    let corpoMensagem = `Segue os dados de faturamento do dia *${dataRef}* por loja:\n\n━━━━━━━━━━━━━━━━━━━\n`;
 
     const total = {
         faturamento_bruto: 0,
@@ -80,7 +80,9 @@ async function gerarFilaWhatsapp() {
         descontos_semanal: 0,
         taxa_servico_semanal: 0,
         ticket_medio_soma_semanal: 0,
-        numero_clientes_semanal: 0,  // Adicionado para somar clientes da semana passada
+        numero_clientes_semanal: 0,
+        numero_pedidos: 0,
+        numero_pedidos_semanal: 0
     };
 
     for (const unidade of unidades) {
@@ -111,18 +113,19 @@ async function gerarFilaWhatsapp() {
         const variacaoDescontos = calcularVariacao(resumoOntem.descontos, resumoSemanaPassada.descontos);
         const variacaoTaxaServico = calcularVariacao(resumoOntem.taxa_servico, resumoSemanaPassada.taxa_servico);
         const variacaoTicketMedio = calcularVariacao(resumoOntem.ticket_medio, resumoSemanaPassada.ticket_medio);
-        const variacaoNumeroClientes = calcularVariacao(resumoOntem.numero_clientes, resumoSemanaPassada.numero_clientes);  // Variação de clientes
+        const variacaoNumeroClientes = calcularVariacao(resumoOntem.numero_clientes, resumoSemanaPassada.numero_clientes);
+        const variacaoNumeroPedidos = calcularVariacao(resumoOntem.numero_pedidos, resumoSemanaPassada.numero_pedidos);
 
 
         corpoMensagem +=
-            `📍 ${unitName}
-💰 Bruto: ${formatCurrency(resumoOntem.faturamento_bruto)} [vs ${formatCurrency(resumoSemanaPassada.faturamento_bruto)}]
-💵 Líquido: ${formatCurrency(resumoOntem.faturamento_liquido)} [Vs ${formatCurrency(resumoSemanaPassada.faturamento_liquido)}]
-🗒 N Pedidos: ${resumoOntem.numero_pedidos} [Vs ${resumoSemanaPassada.numero_pedidos}]
-🎟 Descontos: ${formatCurrency(resumoOntem.descontos)} [Vs ${formatCurrency(resumoSemanaPassada.descontos)}]
-🧾 Taxa Serviço: ${formatCurrency(resumoOntem.taxa_servico)} [Vs ${formatCurrency(resumoSemanaPassada.taxa_servico)}]
-👥 Clientes: ${resumoOntem.numero_clientes} [Vs ${resumoSemanaPassada.numero_clientes}]
-📈 Ticket Médio: ${formatCurrency(resumoOntem.ticket_medio)} [Vs ${formatCurrency(resumoSemanaPassada.ticket_medio)}]
+            `📍 *${unitName}*
+💰 Bruto: *${formatCurrency(resumoOntem.faturamento_bruto)}* [vs ${formatCurrency(resumoSemanaPassada.faturamento_bruto)}]
+💵 Líquido: *${formatCurrency(resumoOntem.faturamento_liquido)}* [vs ${formatCurrency(resumoSemanaPassada.faturamento_liquido)}]
+🗒 N.Pedidos: *${resumoOntem.numero_pedidos}* [vs ${resumoSemanaPassada.numero_pedidos}]
+🎟 Descontos: *${formatCurrency(resumoOntem.descontos)}* [vs ${formatCurrency(resumoSemanaPassada.descontos)}]
+🧾 Taxa Serviço: *${formatCurrency(resumoOntem.taxa_servico)}* [vs ${formatCurrency(resumoSemanaPassada.taxa_servico)}]
+👥 Clientes: *${resumoOntem.numero_clientes}* [vs ${resumoSemanaPassada.numero_clientes}]
+📈 Ticket Médio: *${formatCurrency(resumoOntem.ticket_medio)}* [vs ${formatCurrency(resumoSemanaPassada.ticket_medio)}]
 
 Variação de Faturamento Liq.: ${calcularVariacao(resumoOntem.faturamento_liquido, resumoSemanaPassada.faturamento_liquido)}
 Variação de N.pedidos: ${calcularVariacao(resumoOntem.numero_pedidos, resumoSemanaPassada.numero_pedidos)}
@@ -135,6 +138,7 @@ Variação de N.pedidos: ${calcularVariacao(resumoOntem.numero_pedidos, resumoSe
         total.taxa_servico += resumoOntem.taxa_servico;
         total.numero_clientes += resumoOntem.numero_clientes;
         total.ticket_medio_soma += resumoOntem.ticket_medio;
+        total.numero_pedidos += resumoOntem.numero_pedidos;
         total.lojas++;
 
         total.faturamento_bruto_semanal += resumoSemanaPassada.faturamento_bruto;
@@ -142,7 +146,8 @@ Variação de N.pedidos: ${calcularVariacao(resumoOntem.numero_pedidos, resumoSe
         total.descontos_semanal += resumoSemanaPassada.descontos;
         total.taxa_servico_semanal += resumoSemanaPassada.taxa_servico;
         total.ticket_medio_soma_semanal += resumoSemanaPassada.ticket_medio;
-        total.numero_clientes_semanal += resumoSemanaPassada.numero_clientes; // Somando o total de clientes da semana passada
+        total.numero_clientes_semanal += resumoSemanaPassada.numero_clientes;
+        total.numero_pedidos_semanal += resumoSemanaPassada.numero_pedidos;
     }
 
     // Cálculo da variação percentual no consolidado geral
@@ -151,17 +156,22 @@ Variação de N.pedidos: ${calcularVariacao(resumoOntem.numero_pedidos, resumoSe
     const variacaoDescontosTotal = calcularVariacao(total.descontos, total.descontos_semanal);
     const variacaoTaxaServicoTotal = calcularVariacao(total.taxa_servico, total.taxa_servico_semanal);
     const variacaoTicketMedioTotal = calcularVariacao(total.ticket_medio_soma, total.ticket_medio_soma_semanal);
-    const variacaoClientesTotal = calcularVariacao(total.numero_clientes, total.numero_clientes_semanal); // Variacao do número de clientes
+    const variacaoClientesTotal = calcularVariacao(total.numero_clientes, total.numero_clientes_semanal);
+    const variacaoNumeroPedidosTotal = calcularVariacao(total.numero_pedidos, total.numero_pedidos_semanal);
 
     if (total.lojas > 0) {
         corpoMensagem +=
             `📊 *Consolidado Geral*
-💰 *Bruto Total:* *${formatCurrency(total.faturamento_bruto)}* [${formatCurrency(total.faturamento_bruto_semanal)}; ${variacaoFaturamentoBrutoTotal}]
-💵 *Líquido Total:* *${formatCurrency(total.faturamento_liquido)}* [${formatCurrency(total.faturamento_liquido_semanal)}; ${variacaoFaturamentoLiquidoTotal}]
-🎟 *Descontos Total:* *${formatCurrency(total.descontos)}* [${formatCurrency(total.descontos_semanal)}; ${variacaoDescontosTotal}]
-🧾 *Taxa Serviço Total:* *${formatCurrency(total.taxa_servico)}* [${formatCurrency(total.taxa_servico_semanal)}; ${variacaoTaxaServicoTotal}]
-👥 *Total de Clientes:* *${total.numero_clientes}* [${total.numero_clientes_semanal}; ${variacaoClientesTotal}]
-📈 *Média Ticket Médio:* *${formatCurrency(total.ticket_medio_soma / total.lojas)}* [${formatCurrency(total.ticket_medio_soma_semanal / total.lojas)}; ${variacaoTicketMedioTotal}]
+💰 *Bruto:* *${formatCurrency(total.faturamento_bruto)}* [vs ${formatCurrency(total.faturamento_bruto_semanal)};]
+💵 *Líquido:* *${formatCurrency(total.faturamento_liquido)}* [vs ${formatCurrency(total.faturamento_liquido_semanal)}; ]
+🗒 *N.Pedidos:* *${total.numero_pedidos}* [vs ${total.numero_pedidos_semanal}; ]
+🎟 *Descontos:* *${formatCurrency(total.descontos)}* [vs ${formatCurrency(total.descontos_semanal)}; ]
+🧾 *Taxa Serviço:* *${formatCurrency(total.taxa_servico)}* [vs ${formatCurrency(total.taxa_servico_semanal)};]
+👥 *Clientes:* *${total.numero_clientes}* [vs ${total.numero_clientes_semanal}; ]
+📈 *Ticket Médio:* *${formatCurrency(total.ticket_medio_soma / total.lojas)}* [vs ${formatCurrency(total.ticket_medio_soma_semanal / total.lojas)};]
+
+*Variação de Faturamento Liq.:* ${calcularVariacao(total.faturamento_liquido, total.faturamento_liquido_semanal)}
+*Variação de N.pedidos:* ${calcularVariacao(total.numero_pedidos, total.numero_pedidos_semanal)}
 `;
     }
 
