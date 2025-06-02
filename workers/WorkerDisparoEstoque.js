@@ -14,6 +14,8 @@ const sqs = new SQSClient({
 const DESTINOS = [
     { nome: 'Claudio', telefone: '5583999275543' }
     ,{ nome: 'Paula', telefone: '5571991248941' }
+    ,{ nome: 'Edno', telefone: '5571992649337' }
+    ,{nome: 'Pedro', telefone: '5571992501052' }
 ];
 
 function calcularVariacao(atual, anterior) {
@@ -45,7 +47,7 @@ async function gerarFilaWhatsappCMV() {
     const dt_fim_anterior = `${domingoAnterior.toISOString().split('T')[0]} 23:59:59`;
 
     const semanaRef = `${ultimaSegunda.toLocaleDateString('pt-BR')} a ${ultimoDomingo.toLocaleDateString('pt-BR')}`;
-    let corpoMensagem = `📦 *Resumo de CMV - ${semanaRef}*\n━━━━━━━━━━━━━━━━━━━\n`;
+    let corpoMensagem = `Segue resumo da semana, referente aos dados de *estoque - (${semanaRef})*\n━━━━━━━━━━━━━━━━━━━\n`;
 
     const dadosAtuais = await callPHP('generateResumoEstoquePorGrupoNAuth', {
         dt_inicio,
@@ -87,14 +89,14 @@ async function gerarFilaWhatsappCMV() {
     for (const lojaAtual of dadosAtuais.data) {
         const anterior = mapAnteriores[lojaAtual.lojaId] || {};
 
-        corpoMensagem += `🏬 *${lojaAtual.nomeLoja}*\n`;
+        corpoMensagem += `📍 *${lojaAtual.nomeLoja}*\n`;
         corpoMensagem += `💰 Faturamento: *${formatCurrency(lojaAtual.faturamento_bruto)}* [Vs ${formatCurrency(anterior.faturamento_bruto || 0)}]\n`;
-        corpoMensagem += `📦 CMV: *${formatCurrency(lojaAtual.cmv)}* [Vs ${formatCurrency(anterior.cmv || 0)}]\n`;
-        corpoMensagem += `📊 %CMV: *${lojaAtual.percentual_cmv.toFixed(2)}%* [Vs ${(anterior.percentual_cmv || 0).toFixed(2)}%]\n`;
         corpoMensagem += `🛒 Compras: *${formatCurrency(lojaAtual.total_compras)}* [Vs ${formatCurrency(anterior.total_compras || 0)}]\n`;
-        corpoMensagem += `📤 Saídas: *${formatCurrency(lojaAtual.total_saidas)}* [Vs ${formatCurrency(anterior.total_saidas || 0)}]\n`;
-        corpoMensagem += `📉 Variação CMV: ${calcularVariacao(lojaAtual.cmv, anterior.cmv || 0)}\n`;
-        corpoMensagem += `📉 Variação %CMV: ${calcularVariacao(lojaAtual.percentual_cmv, anterior.percentual_cmv || 0)}\n`;
+        corpoMensagem += `📊 %CMV: *${lojaAtual.percentual_cmv.toFixed(2)}%* [Vs ${(anterior.percentual_cmv || 0).toFixed(2)}%]\n`;
+        corpoMensagem += ` \n`;
+        corpoMensagem += `Variação Faturamento: ${calcularVariacao(lojaAtual.faturamento_bruto, anterior.faturamento_bruto || 0)}\n`;
+        corpoMensagem += `Variação %CMV: ${calcularVariacao(lojaAtual.percentual_cmv, anterior.percentual_cmv || 0)}\n`;
+        corpoMensagem += `Variação Compras: ${calcularVariacao(lojaAtual.total_compras, anterior.total_compras || 0)}\n`;
         corpoMensagem += `━━━━━━━━━━━━━━━━━━━\n`;
 
         soma.atual.faturamento += lojaAtual.faturamento_bruto || 0;
@@ -113,15 +115,15 @@ async function gerarFilaWhatsappCMV() {
 
     corpoMensagem += `📊 *Consolidado Geral*\n`;
     corpoMensagem += `💰 Faturamento: *${formatCurrency(soma.atual.faturamento)}* [Vs ${formatCurrency(soma.anterior.faturamento)}]\n`;
-    corpoMensagem += `📦 CMV: *${formatCurrency(soma.atual.cmv)}* [Vs ${formatCurrency(soma.anterior.cmv)}]\n`;
     corpoMensagem += `📊 %CMV: *${percentualCmvAtual.toFixed(2)}%* [Vs ${percentualCmvAnterior.toFixed(2)}%]\n`;
     corpoMensagem += `🛒 Compras: *${formatCurrency(soma.atual.compras)}* [Vs ${formatCurrency(soma.anterior.compras)}]\n`;
-    corpoMensagem += `📤 Saídas: *${formatCurrency(soma.atual.saidas)}* [Vs ${formatCurrency(soma.anterior.saidas)}]\n`;
-    corpoMensagem += `📉 Variação CMV: ${calcularVariacao(soma.atual.cmv, soma.anterior.cmv)}\n`;
-    corpoMensagem += `📉 Variação %CMV: ${calcularVariacao(percentualCmvAtual, percentualCmvAnterior)}\n`;
+    corpoMensagem += `\n`;
+    corpoMensagem += `Variação Faturamento: ${calcularVariacao(soma.atual.faturamento, soma.anterior.faturamento)}\n`;
+    corpoMensagem += `Variação %CMV: ${calcularVariacao(percentualCmvAtual, percentualCmvAnterior)}\n`;
+    corpoMensagem += `Variação Compras: ${calcularVariacao(soma.atual.compras, soma.anterior.compras)}\n`;
 
     for (const destinatario of DESTINOS) {
-        const mensagem = `📊 Bom dia, *${destinatario.nome}*!\n\n${corpoMensagem.trim()}`;
+        const mensagem = `Boa Tarde, *${destinatario.nome}*!\n\n${corpoMensagem.trim()}`;
 
         const payload = {
             telefone: destinatario.telefone,

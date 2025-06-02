@@ -51,7 +51,7 @@ cron.schedule('00 7 * * *', () => {
     timezone: 'America/Sao_Paulo'
 });
 
-cron.schedule('30 09 * * *', () => {
+cron.schedule('0 15 * * 1', () => {
     console.log(`🚀 Executando job Fluxo de Estoque às ${new Date().toLocaleTimeString()}`);
     ExecuteJobFluxoEstoque();
 }, {
