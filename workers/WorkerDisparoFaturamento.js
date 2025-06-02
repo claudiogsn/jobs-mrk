@@ -119,16 +119,16 @@ async function gerarFilaWhatsapp() {
 
         corpoMensagem +=
             `📍 *${unitName}*
-💰 Bruto: *${formatCurrency(resumoOntem.faturamento_bruto)}* [vs ${formatCurrency(resumoSemanaPassada.faturamento_bruto)}]
-💵 Líquido: *${formatCurrency(resumoOntem.faturamento_liquido)}* [vs ${formatCurrency(resumoSemanaPassada.faturamento_liquido)}]
-🗒 N.Pedidos: *${resumoOntem.numero_pedidos}* [vs ${resumoSemanaPassada.numero_pedidos}]
-🎟 Descontos: *${formatCurrency(resumoOntem.descontos)}* [vs ${formatCurrency(resumoSemanaPassada.descontos)}]
-🧾 Taxa Serviço: *${formatCurrency(resumoOntem.taxa_servico)}* [vs ${formatCurrency(resumoSemanaPassada.taxa_servico)}]
-👥 Clientes: *${resumoOntem.numero_clientes}* [vs ${resumoSemanaPassada.numero_clientes}]
-📈 Ticket Médio: *${formatCurrency(resumoOntem.ticket_medio)}* [vs ${formatCurrency(resumoSemanaPassada.ticket_medio)}]
+💰 Bruto: *${formatCurrency(resumoOntem.faturamento_bruto)}* [Vs ${formatCurrency(resumoSemanaPassada.faturamento_bruto)}]
+💵 Líquido: *${formatCurrency(resumoOntem.faturamento_liquido)}* [Vs ${formatCurrency(resumoSemanaPassada.faturamento_liquido)}]
+🗒 N.Pedidos: *${resumoOntem.numero_pedidos}* [Vs ${resumoSemanaPassada.numero_pedidos}]
+🎟 Descontos: *${formatCurrency(resumoOntem.descontos)}* [Vs ${formatCurrency(resumoSemanaPassada.descontos)}]
+🧾 Taxa Serviço: *${formatCurrency(resumoOntem.taxa_servico)}* [Vs ${formatCurrency(resumoSemanaPassada.taxa_servico)}]
+👥 Clientes: *${resumoOntem.numero_clientes}* [Vs ${resumoSemanaPassada.numero_clientes}]
+📈 Ticket Médio: *${formatCurrency(resumoOntem.ticket_medio)}* [Vs ${formatCurrency(resumoSemanaPassada.ticket_medio)}]
 
 Variação de Faturamento Liq.: ${calcularVariacao(resumoOntem.faturamento_liquido, resumoSemanaPassada.faturamento_liquido)}
-Variação de N.pedidos: ${calcularVariacao(resumoOntem.numero_pedidos, resumoSemanaPassada.numero_pedidos)}
+Variação de N.Pedidos: ${calcularVariacao(resumoOntem.numero_pedidos, resumoSemanaPassada.numero_pedidos)}
 ━━━━━━━━━━━━━━━━━━━
 `;
 
@@ -162,16 +162,16 @@ Variação de N.pedidos: ${calcularVariacao(resumoOntem.numero_pedidos, resumoSe
     if (total.lojas > 0) {
         corpoMensagem +=
             `📊 *Consolidado Geral*
-💰 *Bruto:* *${formatCurrency(total.faturamento_bruto)}* [vs ${formatCurrency(total.faturamento_bruto_semanal)};]
-💵 *Líquido:* *${formatCurrency(total.faturamento_liquido)}* [vs ${formatCurrency(total.faturamento_liquido_semanal)}; ]
-🗒 *N.Pedidos:* *${total.numero_pedidos}* [vs ${total.numero_pedidos_semanal}; ]
-🎟 *Descontos:* *${formatCurrency(total.descontos)}* [vs ${formatCurrency(total.descontos_semanal)}; ]
-🧾 *Taxa Serviço:* *${formatCurrency(total.taxa_servico)}* [vs ${formatCurrency(total.taxa_servico_semanal)};]
-👥 *Clientes:* *${total.numero_clientes}* [vs ${total.numero_clientes_semanal}; ]
-📈 *Ticket Médio:* *${formatCurrency(total.ticket_medio_soma / total.lojas)}* [vs ${formatCurrency(total.ticket_medio_soma_semanal / total.lojas)};]
+💰 *Bruto:* *${formatCurrency(total.faturamento_bruto)}* [Vs ${formatCurrency(total.faturamento_bruto_semanal)}]
+💵 *Líquido:* *${formatCurrency(total.faturamento_liquido)}* [Vs ${formatCurrency(total.faturamento_liquido_semanal)}]
+🗒 *N.Pedidos:* *${total.numero_pedidos}* [Vs ${total.numero_pedidos_semanal}]
+🎟 *Descontos:* *${formatCurrency(total.descontos)}* [Vs ${formatCurrency(total.descontos_semanal)}]
+🧾 *Taxa Serviço:* *${formatCurrency(total.taxa_servico)}* [Vs ${formatCurrency(total.taxa_servico_semanal)}]
+👥 *Clientes:* *${total.numero_clientes}* [Vs ${total.numero_clientes_semanal}]
+📈 *Ticket Médio:* *${formatCurrency(total.ticket_medio_soma / total.lojas)}* [Vs ${formatCurrency(total.ticket_medio_soma_semanal / total.lojas)}]
 
 *Variação de Faturamento Liq.:* ${calcularVariacao(total.faturamento_liquido, total.faturamento_liquido_semanal)}
-*Variação de N.pedidos:* ${calcularVariacao(total.numero_pedidos, total.numero_pedidos_semanal)}
+*Variação de N.Pedidos:* ${calcularVariacao(total.numero_pedidos, total.numero_pedidos_semanal)}
 `;
     }
 
