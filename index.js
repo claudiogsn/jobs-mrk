@@ -51,14 +51,14 @@ cron.schedule('00 7 * * *', () => {
     timezone: 'America/Sao_Paulo'
 });
 
-cron.schedule('0 15 * * 1', () => {
+cron.schedule('00 9 * * *', () => {
     console.log(`🚀 Executando job Fluxo de Estoque às ${new Date().toLocaleTimeString()}`);
     ExecuteJobFluxoEstoque();
 }, {
     timezone: 'America/Sao_Paulo'
 });
 
-cron.schedule('10 07 * * *', () => {
+cron.schedule('0 15 * * 1', () => {
     console.log(`🚀 Executando disparo para CMV ${new Date().toLocaleTimeString()}`);
     gerarFilaWhatsappCMV();
 }, {
