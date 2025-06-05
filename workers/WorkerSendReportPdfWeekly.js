@@ -126,7 +126,7 @@ async function SendReportPdfWithResumo() {
 
     const textoResumo = (nome) => `
 🌅 Bom dia, *${nome}*!
-Segue resumo da semana, referente aos dados de *faturamento (${inicioAtual.toLocaleDateString()} a ${fimAtual.toLocaleDateString()})*:
+Segue resumo da semana, referente aos dados de *faturamento (${inicioAtual.toLocaleDateString('pt-BR')} a ${fimAtual.toLocaleDateString('pt-BR')})*:
 
 📊 *Consolidado Geral*
 💰 Bruto: ${formatCurrency(resumoAtualTotal.faturamento_bruto)} [Vs ${formatCurrency(resumoAnteriorTotal.faturamento_bruto)}]
