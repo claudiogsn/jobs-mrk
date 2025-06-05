@@ -9,6 +9,7 @@ const {processQueueWhatsapp} = require('./workers/workerWhatsapp');
 const {gerarFilaWhatsapp} = require('./workers/WorkerDisparoFaturamento');
 const {gerarFilaWhatsappCMV} = require('./workers/WorkerDisparoEstoque');
 const { ExecuteJobFluxoEstoque } = require('./workers/workerFluxoEstoque');
+const {SendReportPdfWithResumo} = require("./workers/WorkerSendReportPdfWeekly");
 
 
 
@@ -61,6 +62,13 @@ cron.schedule('00 9 * * *', () => {
 cron.schedule('0 15 * * 1', () => {
     console.log(`🚀 Executando disparo para CMV ${new Date().toLocaleTimeString()}`);
     gerarFilaWhatsappCMV();
+}, {
+    timezone: 'America/Sao_Paulo'
+});
+
+cron.schedule('30 7 * * *', () => {
+    console.log(`🚀 Executando disparo para faturamento ${new Date().toLocaleTimeString()}`);
+    SendReportPdfWithResumo();
 }, {
     timezone: 'America/Sao_Paulo'
 });
