@@ -66,7 +66,7 @@ cron.schedule('0 15 * * 1', () => {
     timezone: 'America/Sao_Paulo'
 });
 
-cron.schedule('30 7 * * *', () => {
+cron.schedule('0 11 * * 1', () => {
     console.log(`🚀 Executando disparo para faturamento ${new Date().toLocaleTimeString()}`);
     SendReportPdfWithResumo();
 }, {
