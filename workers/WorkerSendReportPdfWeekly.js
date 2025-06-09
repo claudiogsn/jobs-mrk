@@ -5,9 +5,9 @@ const axios = require('axios');
 
 const DESTINOS = [
     { nome: 'Claudio', telefone: '5583999275543' }
-    ,{ nome: 'Paula', telefone: '5571991248941' }
-    ,{ nome: 'Edno', telefone: '5571992649337' }
-    ,{ nome: 'Pedro', telefone: '5571992501052' }
+    //,{ nome: 'Paula', telefone: '5571991248941' }
+    //,{ nome: 'Edno', telefone: '5571992649337' }
+    //,{ nome: 'Pedro', telefone: '5571992501052' }
 ];
 
 function formatCurrency(value) {
@@ -69,8 +69,7 @@ async function sendWhatsappPdf(telefone, url) {
 }
 
 async function SendReportPdfWithResumo() {
-    const groupId = '1';
-
+    
     const hoje = new Date();
     const fimAtual = new Date(hoje.setDate(hoje.getDate() - hoje.getDay())); // último domingo
     const inicioAtual = new Date(fimAtual);
@@ -105,7 +104,6 @@ async function SendReportPdfWithResumo() {
         taxa_servico: somarCampos(resumoAtualData, 'taxa_servico'),
         faturamento_liquido: somarCampos(resumoAtualData, 'faturamento_liquido'),
         numero_clientes: somarCampos(resumoAtualData, 'numero_clientes'),
-        ticket_medio: somarCampos(resumoAtualData, 'ticket_medio'),
         numero_pedidos: somarCampos(resumoAtualData, 'numero_pedidos'),
     };
 
@@ -115,7 +113,6 @@ async function SendReportPdfWithResumo() {
         taxa_servico: somarCampos(resumoAnteriorData, 'taxa_servico'),
         faturamento_liquido: somarCampos(resumoAnteriorData, 'faturamento_liquido'),
         numero_clientes: somarCampos(resumoAnteriorData, 'numero_clientes'),
-        ticket_medio: somarCampos(resumoAnteriorData, 'ticket_medio'),
         numero_pedidos: somarCampos(resumoAnteriorData, 'numero_pedidos'),
     };
 
@@ -135,7 +132,7 @@ Segue resumo da semana, referente aos dados de *faturamento (${inicioAtual.toLoc
 💵 Líquido: ${formatCurrency(resumoAtualTotal.faturamento_liquido)} [Vs ${formatCurrency(resumoAnteriorTotal.faturamento_liquido)}]
 🗒 N.Pedidos: ${resumoAtualTotal.numero_pedidos} [Vs ${resumoAnteriorTotal.numero_pedidos}]
 👥 Clientes: ${resumoAtualTotal.numero_clientes} [Vs ${resumoAnteriorTotal.numero_clientes}]
-📈 Ticket Médio: ${formatCurrency(resumoAtualTotal.ticket_medio)} [Vs ${formatCurrency(resumoAnteriorTotal.ticket_medio)}]
+📈 Ticket Médio: ${formatCurrency(resumoAtualTotal.faturamento_bruto / resumoAtualTotal.numero_clientes)} [Vs ${formatCurrency(resumoAnteriorTotal.faturamento_bruto / resumoAnteriorTotal.numero_clientes)}]
 
 Variação de Faturamento Liq.: ${variacoes.faturamento_liquido}
 Variação de N.Pedidos: ${variacoes.numero_pedidos}
