@@ -5,9 +5,9 @@ const axios = require('axios');
 
 const DESTINOS = [
     { nome: 'Claudio', telefone: '5583999275543' }
-    //,{ nome: 'Paula', telefone: '5571991248941' }
-    //,{ nome: 'Edno', telefone: '5571992649337' }
-    //,{ nome: 'Pedro', telefone: '5571992501052' }
+    ,{ nome: 'Paula', telefone: '5571991248941' }
+    ,{ nome: 'Edno', telefone: '5571992649337' }
+    ,{ nome: 'Pedro', telefone: '5571992501052' }
 ];
 
 function formatCurrency(value) {
