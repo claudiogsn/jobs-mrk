@@ -23,6 +23,13 @@ cron.schedule('*/30 * * * *', () => {
     timezone: 'America/Sao_Paulo'
 });
 
+cron.schedule('34 14 * * *', () => {
+    console.log(`🔁 Executando job Caixa (cron */30) - ${new Date().toLocaleTimeString()}`);
+    ExecuteJobCaixa();
+}, {
+    timezone: 'America/Sao_Paulo'
+});
+
 
 cron.schedule('00 4 * * *', () => {
     console.log(`🚀 Executando job ItemVenda às ${new Date().toLocaleTimeString()}`);

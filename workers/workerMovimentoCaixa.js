@@ -193,7 +193,6 @@ async function processMovimentoCaixa({ group_id, dt_inicio, dt_fim } = {}) {
 }
 
 async function ExecuteJobCaixa() {
-    const group_id = process.env.GROUP_ID;
     const hoje = DateTime.local();
     const ontem = hoje.minus({ days: 1 });
 
@@ -201,9 +200,25 @@ async function ExecuteJobCaixa() {
     const dt_fim = hoje.toFormat('yyyy-MM-dd');
 
     console.log(`⏱️ Iniciando job de ${dt_inicio} até ${dt_fim} às ${hoje.toFormat('HH:mm:ss')}`);
-    await processMovimentoCaixa({ group_id, dt_inicio, dt_fim });
+
+    const grupos = await callPHP('getGroupsToProcess', {});
+
+    if (!Array.isArray(grupos) || grupos.length === 0) {
+        console.log('⚠️ Nenhum grupo retornado pela API `getGroupsToProcess`.');
+        return;
+    }
+
+    for (const grupo of grupos) {
+        const group_id = grupo.id;
+        const nomeGrupo = grupo.nome;
+
+        console.log(`🚀 Processando grupo: ${nomeGrupo} (ID: ${group_id})`);
+        await processMovimentoCaixa({ group_id, dt_inicio, dt_fim });
+    }
+
     console.log(`✅ Job finalizado às ${DateTime.local().toFormat('HH:mm:ss')}`);
 }
+
 
 module.exports = { processMovimentoCaixa, ExecuteJobCaixa };
 

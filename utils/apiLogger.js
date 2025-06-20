@@ -39,7 +39,31 @@ async function callPHP(method, data) {
     }
 }
 
+
+async function getZigFaturamento(lojaId, dtinicio, dtfim, tokenZig) {
+    const url = `https://api.zigcore.com.br/integration/erp/faturamento?dtinicio=${dtinicio}&dtfim=${dtfim}&loja=${lojaId}`;
+
+    appendApiLog(`➡️ REQ Zig [${lojaId}]: ${url}`);
+
+    try {
+        const res = await axios.get(url, {
+            headers: {
+                Authorization: tokenZig
+            }
+        });
+
+        const logBody = JSON.stringify(res.data);
+        appendApiLog(`✅ RES Zig [${lojaId}]: ${logBody.length > 1000 ? logBody.substring(0, 1000) + '... [truncated]' : logBody}`);
+        return res.data || [];
+    } catch (err) {
+        const errorData = err.response?.data || err.message || 'Erro desconhecido';
+        appendApiLog(`❌ ERROR Zig [${lojaId}]: ${JSON.stringify(errorData)}`);
+        return [];
+    }
+}
+
 module.exports = {
     appendApiLog,
-    callPHP
+    callPHP,
+    getZigFaturamento
 };
