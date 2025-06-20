@@ -164,7 +164,9 @@ async function processMovimentoCaixa({ group_id, dt_inicio, dt_fim } = {}) {
                 dataAbertura: ajustarHorarioMenew(mov.dataAbertura),
                 dataFechamento: ajustarHorarioMenew(mov.dataFechamento),
                 dataContabil: ajustarHorarioMenew(mov.dataContabil, 'date'),
-                meiosPagamento: adicionarSufixoSequencial(mov.meiosPagamento),
+                meiosPagamento: mov.meiosPagamento
+                    ? adicionarSufixoSequencial(mov.meiosPagamento)
+                    : [],
                 consumidores: mov.consumidores
             }));
 
