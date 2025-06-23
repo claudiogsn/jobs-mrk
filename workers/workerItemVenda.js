@@ -3,6 +3,8 @@ const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
 const axios = require('axios');
 const { callPHP, appendApiLog } = require('../utils/apiLogger');
+const { ExecuteJobStockZig } = require('./workerStockZig');
+
 
 async function callMenew(methodPayload, token) {
     try {
@@ -150,6 +152,8 @@ async function ExecuteJobItemVenda() {
     log(`🚀 Iniciando job ItemVenda de ${dt_inicio} até ${dt_fim} às ${hoje.toFormat('HH:mm:ss')}`, 'workerItemVenda');
     await processItemVenda({ group_id, dt_inicio, dt_fim });
     log(`✅ Job ItemVenda finalizado às ${hoje.toFormat('HH:mm:ss')}`, 'workerItemVenda');
+
+    ExecuteJobStockZig();
 }
 
 module.exports = { processItemVenda, ExecuteJobItemVenda };

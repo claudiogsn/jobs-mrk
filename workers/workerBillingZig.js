@@ -62,8 +62,8 @@ async function getZigDadosEstatisticos(lojaId, data, tokenZig) {
 
         let descontos = 0;
         let gorjeta = 0;
-        let total_clientes = 0;
 
+        // Somar descontos e identificar gorjeta
         for (const item of saida) {
             const desconto = parseInt(item.discountValue ?? 0);
             if (!isNaN(desconto)) {
@@ -79,19 +79,23 @@ async function getZigDadosEstatisticos(lojaId, data, tokenZig) {
             }
         }
 
-        total_clientes = compradores.filter(c => c.isPaid === true).length;
+        // Filtrar clientes pagos e únicos por documento
+        const compradoresPagos = compradores.filter(c => c.isPaid === true);
+        const userDocuments = compradoresPagos.map(c => c.userDocument).filter(Boolean);
+        const total_clientes_unicos = new Set(userDocuments).size;
 
         return {
             descontos: parseFloat((descontos / 100).toFixed(2)),
             gorjeta: parseFloat((gorjeta / 100).toFixed(2)),
-            total_clientes
+            total_clientes: total_clientes_unicos,
+
         };
     } catch (err) {
         log(`❌ Erro ao buscar estatísticas do Zig para loja ${lojaId} em ${data}: ${err.message}`, 'workerBillingZig');
         return {
             descontos: 0,
             gorjeta: 0,
-            total_clientes: 0
+            total_clientes: 0,
         };
     }
 }
@@ -105,6 +109,9 @@ async function ExecuteJobCaixaZig(dt_inicio, dt_fim) {
         dt_inicio = ontem;
         dt_fim = hoje;
     }
+
+    // dt_inicio = '2025-06-18';
+    // dt_fim = '2025-06-23';
 
     const start = DateTime.fromISO(dt_inicio);
     const end = DateTime.fromISO(dt_fim);
