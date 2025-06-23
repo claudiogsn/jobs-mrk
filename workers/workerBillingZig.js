@@ -3,7 +3,6 @@ const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
 const { callPHP, getZig } = require('../utils/apiLogger');
 
-// Processa UM único dia
 async function processJobCaixaZig(group_id, data) {
     const lojas = await callPHP('getUnitsIntegrationZigBilling', { group_id });
 
@@ -97,33 +96,44 @@ async function getZigDadosEstatisticos(lojaId, data, tokenZig) {
     }
 }
 
-// Loop de dias → chama `processJobCaixaZig` para cada dia
-async function ExecuteJobCaixaZig(group_id, dt_inicio, dt_fim) {
+
+async function ExecuteJobCaixaZig(dt_inicio, dt_fim) {
+    const hoje = DateTime.now().toISODate();
+    const ontem = DateTime.now().minus({ days: 1 }).toISODate();
+
+    if (!dt_inicio || !dt_fim) {
+        dt_inicio = ontem;
+        dt_fim = hoje;
+    }
+
     const start = DateTime.fromISO(dt_inicio);
     const end = DateTime.fromISO(dt_fim);
 
-    for (let cursor = start; cursor <= end; cursor = cursor.plus({ days: 1 })) {
-        const data = cursor.toFormat('yyyy-MM-dd');
-        await processJobCaixaZig(group_id, data);
+    const grupos = await callPHP('getGroupsToProcess', {});
+
+    if (!Array.isArray(grupos) || grupos.length === 0) {
+        log('⚠️ Nenhum grupo encontrado para processar.', 'workerBillingZig');
+        return;
     }
 
-    log(`🏁 Job finalizado para o grupo ${group_id} às ${DateTime.local().toFormat('HH:mm:ss')}`, 'workerBillingZig');
+    for (const grupo of grupos) {
+        const group_id = grupo.id;
+        const nomeGrupo = grupo.nome;
+        log(`🚀 Processando grupo: ${nomeGrupo} (ID: ${group_id})`, 'workerBillingZig');
+
+        for (let cursor = start; cursor <= end; cursor = cursor.plus({ days: 1 })) {
+            const data = cursor.toFormat('yyyy-MM-dd');
+            await processJobCaixaZig(group_id, data);
+        }
+
+        log(`🏁 Job finalizado para o grupo ${group_id} às ${DateTime.local().toFormat('HH:mm:ss')}`, 'workerBillingZig');
+    }
 }
+
 
 module.exports = { processJobCaixaZig, ExecuteJobCaixaZig };
 
 // Execução direta via terminal
 if (require.main === module) {
-    const group_id = process.env.GROUP_ID;
-    const hoje = DateTime.local().startOf('day');
-    const ontem = hoje.minus({ days: 1 });
-
-    // const dt_inicio = ontem.toFormat('yyyy-MM-dd');
-    // const dt_fim = ontem.toFormat('yyyy-MM-dd');
-
-    const dt_inicio = '2025-02-01'; // Data fixa para testes
-    const dt_fim = '2025-06-22'; // Data fixa para testes
-
-    log(`⏱️ Iniciando job de ${dt_inicio} até ${dt_fim} às ${hoje.toFormat('HH:mm:ss')}`, 'workerBillingZig');
-    ExecuteJobCaixaZig(group_id, dt_inicio, dt_fim);
+    ExecuteJobCaixaZig();
 }
