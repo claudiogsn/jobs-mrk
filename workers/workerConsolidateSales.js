@@ -1,4 +1,5 @@
 require('dotenv').config();
+
 const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
 const { callPHP } = require('../utils/apiLogger');
@@ -48,9 +49,9 @@ async function ExecuteJobConsolidation() {
   const dt_inicio = ontem.toFormat('yyyy-MM-dd');
   const dt_fim = hoje.toFormat('yyyy-MM-dd');
 
-  console.log(`⏱️ Iniciando job de ${dt_inicio} até ${dt_fim} às ${hoje.toFormat('HH:mm:ss')}`);
+  log(`⏱️ Iniciando job de ${dt_inicio} até ${dt_fim} às ${hoje.toFormat('HH:mm:ss')}`, 'workerConsolidation');
   await processConsolidation({ group_id, dt_inicio, dt_fim });
-  console.log(`✅ Job finalizado às ${DateTime.local().toFormat('HH:mm:ss')}`);
+  log(`🏁 Job finalizado às ${hoje.toFormat('HH:mm:ss')}`, 'workerConsolidation');
 }
 
 module.exports = { processConsolidation, ExecuteJobConsolidation };

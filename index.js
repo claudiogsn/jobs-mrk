@@ -1,5 +1,6 @@
 require('dotenv').config();
 require('./server');
+const { log } = require('utils/logger');
 const cron = require('node-cron');
 const { ExecuteJobCaixa } = require('./workers/workerMovimentoCaixa');
 const { ExecuteJobItemVenda } = require('./workers/workerItemVenda');
@@ -12,19 +13,10 @@ const { ExecuteJobFluxoEstoque } = require('./workers/workerFluxoEstoque');
 const {SendReportPdfWithResumo} = require("./workers/WorkerSendReportPdfWeekly");
 
 
-
-console.log('🕓 Agendador iniciado. Esperando horários programados...');
-
+log('🕓 Iniciando agendador de tarefas...', 'Index');
 
 cron.schedule('*/30 * * * *', () => {
-    console.log(`🔁 Executando job Caixa (cron */30) - ${new Date().toLocaleTimeString()}`);
-    ExecuteJobCaixa();
-}, {
-    timezone: 'America/Sao_Paulo'
-});
-
-cron.schedule('34 14 * * *', () => {
-    console.log(`🔁 Executando job Caixa (cron */30) - ${new Date().toLocaleTimeString()}`);
+    log(`🔁 Executando job Caixa (cron */30) - ${new Date().toLocaleTimeString()}`, 'Index');
     ExecuteJobCaixa();
 }, {
     timezone: 'America/Sao_Paulo'
@@ -32,49 +24,49 @@ cron.schedule('34 14 * * *', () => {
 
 
 cron.schedule('00 4 * * *', () => {
-    console.log(`🚀 Executando job ItemVenda às ${new Date().toLocaleTimeString()}`);
+    log(`🚀 Executando job ItemVenda às ${new Date().toLocaleTimeString()}`, 'Index');
     ExecuteJobItemVenda();
 }, {
     timezone: 'America/Sao_Paulo'
 });
 
 cron.schedule('30 4 * * *', () => {
-    console.log(`🚀 Executando job Consolidation às ${new Date().toLocaleTimeString()}`);
+    log(`🚀 Executando job Consolidation às ${new Date().toLocaleTimeString()}`, 'Index');
     ExecuteJobConsolidation();
 }, {
     timezone: 'America/Sao_Paulo'
 });
 
 cron.schedule('00 5 * * *', () => {
-    console.log(`🚀 Executando job Doc Saida às ${new Date().toLocaleTimeString()}`);
+    log(`🚀 Executando job Doc Saida às ${new Date().toLocaleTimeString()}`, 'Index');
     ExecuteJobDocSaida();
 }, {
     timezone: 'America/Sao_Paulo'
 });
 
 cron.schedule('00 7 * * *', () => {
-    console.log(`🚀 Executando disparo para faturamento ${new Date().toLocaleTimeString()}`);
+    log(`🚀 Executando disparo para faturamento ${new Date().toLocaleTimeString()}`, 'Index');
     gerarFilaWhatsapp();
 }, {
     timezone: 'America/Sao_Paulo'
 });
 
 cron.schedule('00 9 * * *', () => {
-    console.log(`🚀 Executando job Fluxo de Estoque às ${new Date().toLocaleTimeString()}`);
+    log(`🚀 Executando job Fluxo de Estoque às ${new Date().toLocaleTimeString()}`, 'Index');
     ExecuteJobFluxoEstoque();
 }, {
     timezone: 'America/Sao_Paulo'
 });
 
 cron.schedule('0 15 * * 1', () => {
-    console.log(`🚀 Executando disparo para CMV ${new Date().toLocaleTimeString()}`);
+    log(`🚀 Executando disparo para CMV ${new Date().toLocaleTimeString()}`, 'Index');
     gerarFilaWhatsappCMV();
 }, {
     timezone: 'America/Sao_Paulo'
 });
 
 cron.schedule('0 11 * * 1', () => {
-    console.log(`🚀 Executando disparo para faturamento ${new Date().toLocaleTimeString()}`);
+    log(`🚀 Executando disparo para relatório semanal ${new Date().toLocaleTimeString()}`, 'Index');
     SendReportPdfWithResumo();
 }, {
     timezone: 'America/Sao_Paulo'

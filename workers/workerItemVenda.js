@@ -147,9 +147,9 @@ async function ExecuteJobItemVenda() {
     const dt_inicio = ontem.toFormat('yyyy-MM-dd');
     const dt_fim = hoje.toFormat('yyyy-MM-dd');
 
-    console.log(`⏱️ Iniciando processItemVenda de ${dt_inicio} até ${dt_fim} às ${hoje.toFormat('HH:mm:ss')}`);
+    log(`🚀 Iniciando job ItemVenda de ${dt_inicio} até ${dt_fim} às ${hoje.toFormat('HH:mm:ss')}`, 'workerItemVenda');
     await processItemVenda({ group_id, dt_inicio, dt_fim });
-    console.log(`✅ Job finalizado às ${DateTime.local().toFormat('HH:mm:ss')}`);
+    log(`✅ Job ItemVenda finalizado às ${hoje.toFormat('HH:mm:ss')}`, 'workerItemVenda');
 }
 
 module.exports = { processItemVenda, ExecuteJobItemVenda };

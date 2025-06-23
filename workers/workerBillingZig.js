@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
 const { callPHP, getZig } = require('../utils/apiLogger');
 
@@ -7,18 +8,18 @@ async function processJobCaixaZig(group_id, data) {
     const lojas = await callPHP('getUnitsIntegrationZigBilling', { group_id });
 
     if (!Array.isArray(lojas) || lojas.length === 0) {
-        console.log('⚠️ Nenhuma loja encontrada.');
+        log(`⚠️ Nenhuma loja encontrada para o grupo ${group_id} no dia ${data}`, 'workerBillingZig');
         return;
     }
 
-    console.log(`📅 Processando dia ${data}`);
+    log(`🔍 Iniciando processamento de faturamento Zig para o grupo ${group_id} no dia ${data}`, 'workerBillingZig');
 
     for (const loja of lojas) {
         const lojaId = loja.lojaId;
         const tokenZig = loja.token_zig;
 
         if (!lojaId || !tokenZig) {
-            console.log(`⚠️ Dados faltando para loja: ${JSON.stringify(loja)}`);
+            log(`⚠️ Dados faltando para loja: ${JSON.stringify(loja)}`, 'workerBillingZig');
             continue;
         }
 
@@ -27,20 +28,18 @@ async function processJobCaixaZig(group_id, data) {
         if (registros.length > 0) {
             const payload = {
                 method: 'ZigRegisterBilling',
-                token: process.env.API_TOKEN,
                 data: { sales: registros }
             };
-            const res = await callPHP(payload.method, payload.data, payload.token);
-            console.log(`✅ Faturamento loja ${lojaId} em ${data}: ${res?.message || 'sem resposta'}`);
+            const res = await callPHP(payload.method, payload.data);
+            log(`✅ Faturamento loja ${lojaId} em ${data}: ${res?.message || 'sem resposta'}`, 'workerBillingZig');
         } else {
-            console.log(`ℹ️ Sem registros de faturamento para loja ${lojaId} em ${data}`);
+            log(`ℹ️ Sem registros de faturamento para loja ${lojaId} em ${data}`, 'workerBillingZig');
         }
 
         const estatisticas = await getZigDadosEstatisticos(lojaId, data, tokenZig);
 
         const staticPayload = {
             method: 'ZigUpdateStatics',
-            token: process.env.API_TOKEN,
             data: {
                 data,
                 lojaId,
@@ -50,8 +49,8 @@ async function processJobCaixaZig(group_id, data) {
             }
         };
 
-        const res2 = await callPHP(staticPayload.method, staticPayload.data, staticPayload.token);
-        console.log(`📊 Estatísticas loja ${lojaId} em ${data}: ${res2?.message || 'sem resposta'}`);
+        const res2 = await callPHP(staticPayload.method, staticPayload.data);
+        log(`📊 Estatísticas loja ${lojaId} em ${data}: ${res2?.message || 'sem resposta'}`, 'workerBillingZig');
     }
 }
 
@@ -89,7 +88,7 @@ async function getZigDadosEstatisticos(lojaId, data, tokenZig) {
             total_clientes
         };
     } catch (err) {
-        console.error(`❌ Erro ao buscar estatísticas do Zig para loja ${lojaId}:`, err.message);
+        log(`❌ Erro ao buscar estatísticas do Zig para loja ${lojaId} em ${data}: ${err.message}`, 'workerBillingZig');
         return {
             descontos: 0,
             gorjeta: 0,
@@ -108,7 +107,7 @@ async function ExecuteJobCaixaZig(group_id, dt_inicio, dt_fim) {
         await processJobCaixaZig(group_id, data);
     }
 
-    console.log(`🏁 Job finalizado às ${DateTime.local().toFormat('HH:mm:ss')}`);
+    log(`🏁 Job finalizado para o grupo ${group_id} às ${DateTime.local().toFormat('HH:mm:ss')}`, 'workerBillingZig');
 }
 
 module.exports = { processJobCaixaZig, ExecuteJobCaixaZig };
@@ -125,6 +124,6 @@ if (require.main === module) {
     const dt_inicio = '2025-02-01'; // Data fixa para testes
     const dt_fim = '2025-06-22'; // Data fixa para testes
 
-    console.log(`⏱️ Iniciando job de ${dt_inicio} até ${dt_fim} às ${hoje.toFormat('HH:mm:ss')}`);
+    log(`⏱️ Iniciando job de ${dt_inicio} até ${dt_fim} às ${hoje.toFormat('HH:mm:ss')}`, 'workerBillingZig');
     ExecuteJobCaixaZig(group_id, dt_inicio, dt_fim);
 }

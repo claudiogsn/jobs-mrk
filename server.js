@@ -31,7 +31,7 @@ router.get('/logo.png', (req, res) => {
     res.sendFile(path.join(__dirname, 'assets/logo.png'));
 });
 
-// console.log wrapper
+
 const liveLogs = [];
 const MAX_LOGS = 1000;
 const originalLog = console.log;

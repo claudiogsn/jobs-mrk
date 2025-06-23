@@ -49,9 +49,9 @@ async function ExecuteJobDocSaida() {
   const hoje = DateTime.local();
   const day = hoje.minus({ days: 1 });
 
-  console.log(`⏱️ Iniciando processDocSaida de ${day} às ${hoje.toFormat('HH:mm:ss')}`);
+    log(`⏱️ Iniciando processDocSaida de ${day} às ${hoje.toFormat('HH:mm:ss')}`, 'workerCreateDocSaida');
   await processDocSaida({ group_id, day });
-  console.log(`✅ Job finalizado às ${DateTime.local().toFormat('HH:mm:ss')}`);
+    log(`⏱️ Finalizando processDocSaida de ${day} às ${hoje.toFormat('HH:mm:ss')}`, 'workerCreateDocSaida');
 }
 
 module.exports = { processDocSaida, ExecuteJobDocSaida };

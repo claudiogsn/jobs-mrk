@@ -50,7 +50,7 @@ async function processQueue() {
             const data = await sqs.send(command);
 
             if (!data.Messages || data.Messages.length === 0) {
-                log('📭 Nenhuma mensagem na fila, aguardando...', 'workerWhatsapp');
+                //log('📭 Nenhuma mensagem na fila, aguardando...', 'workerWhatsapp');
                 continue;
             }
 

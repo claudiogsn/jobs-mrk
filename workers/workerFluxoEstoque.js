@@ -1,4 +1,6 @@
 require('dotenv').config();
+const { log } = require('../utils/logger');
+
 const mysql = require('mysql2/promise');
 
 const CHUNK_SIZE = 100;
@@ -50,7 +52,7 @@ async function main() {
     `);
 
     for (const loja of lojas) {
-        console.log(`\n🚀 Iniciando processamento da loja: ${loja.name} (${loja.system_unit_id})`);
+        log(`🔍 Processando loja: ${loja.name} (${loja.system_unit_id})`);
         const inicioLoja = Date.now();
 
         const [produtos] = await conn.execute(`
@@ -63,24 +65,23 @@ async function main() {
         const chunks = chunkArray(produtos, CHUNK_SIZE);
 
         for (const [index, chunk] of chunks.entries()) {
-            console.log(`  ⚙️  Processando chunk ${index + 1}/${chunks.length} (${chunk.length} produtos)...`);
-
+            log(`  🧩 Processando chunk ${index + 1}/${chunks.length} (${chunk.length} produtos)...`, `workerFluxoEstoque`);
             await Promise.all(
                 chunk.map(produto =>
                     processarProduto(conn, loja.system_unit_id, produto, dtInicio, dtFim)
                         .then(() => {
                             totalProdutos++;
-                            console.log(`    ✅ Produto ${produto.codigo} OK`);
+                            log(`Produto ${produto.codigo} processado com sucesso`, `workerFluxoEstoque`);
                         })
                         .catch(err => {
-                            console.error(`    ❌ Produto ${produto.codigo} ERRO: ${err.message}`);
+                            log(`Produto ${produto.codigo} falhou: ${err.message}`, `workerFluxoEstoque`);
                         })
                 )
             );
         }
 
         const duracao = ((Date.now() - inicioLoja) / 1000).toFixed(2);
-        console.log(`✅ Loja ${loja.name} finalizada — ${totalProdutos} produtos processados em ${duracao} segundos`);
+        log(`✅ Loja ${loja.name} finalizada — ${totalProdutos} produtos processados em ${duracao} segundos`, `workerFluxoEstoque`);
     }
 
     await conn.end();
@@ -159,7 +160,7 @@ module.exports = { ExecuteJobFluxoEstoque: main };
 // Executa se rodar diretamente
 if (require.main === module) {
     main().catch(err => {
-        console.error('❌ Erro geral:', err.message);
+        log(`❌ Erro ao executar job Fluxo de Estoque: ${err.message}`, 'workerFluxoEstoque');
         process.exit(1);
     });
 }
