@@ -7,7 +7,7 @@ function log(message, workerName = 'worker') {
         .setZone('America/Fortaleza')
         .toFormat('yyyy-MM-dd HH:mm:ss');
 
-    const fullMessage = `[${workerName} - ${timestamp}] - ${message}`;
+    const fullMessage = `[${workerName}] - ${message}`;
 
     console.log(fullMessage);
 

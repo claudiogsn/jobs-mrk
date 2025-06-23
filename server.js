@@ -2,7 +2,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
-const { getLogs } = require('./utils/logger');
+const { getLogs,log} = require('./utils/logger');
 const { processItemVenda } = require('./workers/workerItemVenda');
 const { processConsolidation } = require('./workers/workerConsolidateSales');
 const { processMovimentoCaixa } = require('./workers/workerMovimentoCaixa');
@@ -136,5 +136,5 @@ app.use('/jobs', router);
 
 // inicia o servidor
 app.listen(PORT, () => {
-    console.log(`🟢 Servidor rodando em http://localhost:${PORT}/jobs`);
+    log(`🟢 Servidor iniciado na porta ${PORT}`, 'SERVER');
 });
