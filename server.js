@@ -136,5 +136,5 @@ app.use('/jobs', router);
 
 // inicia o servidor
 app.listen(PORT, () => {
-    log(`🟢 Servidor iniciado na porta ${PORT}`, 'SERVER');
+    log(`🟢 Servidor iniciado na porta ${PORT}`, 'ExpressServer');
 });
