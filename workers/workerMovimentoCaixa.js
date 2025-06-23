@@ -3,7 +3,7 @@ const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
 const axios = require('axios');
 const { callPHP, appendApiLog } = require('../utils/apiLogger');
-const { ExecuteJobCaixaZig } = require('../workers/WorkerBillingZig');
+const { ExecuteJobCaixaZig } = require('./workerBillingZig');
 
 async function callMenew(methodPayload, token) {
     try {
