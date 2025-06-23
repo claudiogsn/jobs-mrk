@@ -13,7 +13,7 @@ const { ExecuteJobFluxoEstoque } = require('./workers/workerFluxoEstoque');
 const {SendReportPdfWithResumo} = require("./workers/WorkerSendReportPdfWeekly");
 
 
-log('🕓 Iniciando agendador de tarefas...', 'CronJob');
+log('🕓 Iniciando agendador de tarefas....', 'CronJob');
 
 cron.schedule('*/25 * * * *', () => {
     log(`🔁 Executando job Caixa (cron */25 - ${new Date().toLocaleTimeString()}`, 'CronJob');
