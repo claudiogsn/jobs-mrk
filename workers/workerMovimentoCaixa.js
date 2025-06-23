@@ -3,6 +3,7 @@ const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
 const axios = require('axios');
 const { callPHP, appendApiLog } = require('../utils/apiLogger');
+const {ExecuteJobCaixaZig} = require("./WorkerBillingZig");
 
 async function callMenew(methodPayload, token) {
     try {
@@ -218,6 +219,8 @@ async function ExecuteJobCaixa() {
     }
 
     log(`🏁 Job finalizado às ${hoje.toFormat('HH:mm:ss')}`, 'workerMovimentoCaixa');
+
+    ExecuteJobCaixaZig();
 }
 
 module.exports = { processMovimentoCaixa, ExecuteJobCaixa };
