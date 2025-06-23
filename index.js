@@ -15,7 +15,7 @@ const {SendReportPdfWithResumo} = require("./workers/WorkerSendReportPdfWeekly")
 
 log('🕓 Iniciando agendador de tarefas...', 'CronJob');
 
-cron.schedule('*/30 * * * *', () => {
+cron.schedule('*/25 * * * *', () => {
     log(`🔁 Executando job Caixa (cron */30) - ${new Date().toLocaleTimeString()}`, 'CronJob');
     ExecuteJobCaixa();
 }, {
