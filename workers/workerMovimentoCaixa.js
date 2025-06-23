@@ -94,7 +94,7 @@ async function processMovimentoCaixa({ group_id, dt_inicio, dt_fim } = {}) {
         log(`📆 Processando período de ${dtinicio} até ${dtfim}`, 'workerMovimentoCaixa');
 
         for (const unidade of unidades) {
-            const customCode = unidade.custom_code;
+            const customCode = unidade.lojaId;
             const systemUnitId = unidade.system_unit_id;
 
             if (!customCode || !systemUnitId) {
