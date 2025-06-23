@@ -1,5 +1,5 @@
 {
-  "name": "mrk-workers-integration",
+  "name": "jobs-mrk",
   "version": "1.0.0",
   "description": "Workers para integração com o sistemas externos ao Portal MRK",
   "main": "index.js",
