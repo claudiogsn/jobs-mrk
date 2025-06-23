@@ -40,10 +40,10 @@ async function callPHP(method, data) {
 }
 
 
-async function getZigFaturamento(lojaId, dtinicio, dtfim, tokenZig) {
-    const url = `https://api.zigcore.com.br/integration/erp/faturamento?dtinicio=${dtinicio}&dtfim=${dtfim}&loja=${lojaId}`;
+async function getZig(endpoint, lojaId, dtinicio, dtfim, tokenZig) {
+    const url = `${process.env.ZIG_URL_INTEGRATION}/${endpoint}?dtinicio=${dtinicio}&dtfim=${dtfim}&loja=${lojaId}`;
 
-    appendApiLog(`➡️ REQ Zig [${lojaId}]: ${url}`);
+    appendApiLog(`➡️ REQ Zig [${lojaId}] [${endpoint}]: ${url}`);
 
     try {
         const res = await axios.get(url, {
@@ -53,11 +53,11 @@ async function getZigFaturamento(lojaId, dtinicio, dtfim, tokenZig) {
         });
 
         const logBody = JSON.stringify(res.data);
-        appendApiLog(`✅ RES Zig [${lojaId}]: ${logBody.length > 1000 ? logBody.substring(0, 1000) + '... [truncated]' : logBody}`);
+        appendApiLog(`✅ RES Zig [${lojaId}] [${endpoint}]: ${logBody.length > 1000 ? logBody.substring(0, 1000) + '... [truncated]' : logBody}`);
         return res.data || [];
     } catch (err) {
         const errorData = err.response?.data || err.message || 'Erro desconhecido';
-        appendApiLog(`❌ ERROR Zig [${lojaId}]: ${JSON.stringify(errorData)}`);
+        appendApiLog(`❌ ERROR Zig [${lojaId}] [${endpoint}]: ${JSON.stringify(errorData)}`);
         return [];
     }
 }
@@ -65,5 +65,5 @@ async function getZigFaturamento(lojaId, dtinicio, dtfim, tokenZig) {
 module.exports = {
     appendApiLog,
     callPHP,
-    getZigFaturamento
+    getZig
 };

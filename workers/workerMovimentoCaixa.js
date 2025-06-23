@@ -71,7 +71,7 @@ async function processMovimentoCaixa({ group_id, dt_inicio, dt_fim } = {}) {
     const dataInicio = DateTime.fromISO(dt_inicio ?? DateTime.local().minus({ days: 1 }).toISODate());
     const dataFim = DateTime.fromISO(dt_fim ?? dataInicio.toISODate());
 
-    const unidades = await callPHP('getUnitsByGroup', { group_id: groupId });
+    const unidades = await callPHP('getUnitsIntegrationMenewBilling', { group_id: groupId });
 
     if (!Array.isArray(unidades) || unidades.length === 0) {
         log('⚠️ Nenhuma unidade encontrada.', 'workerMovimentoCaixa');
@@ -220,7 +220,6 @@ async function ExecuteJobCaixa() {
 
     console.log(`✅ Job finalizado às ${DateTime.local().toFormat('HH:mm:ss')}`);
 }
-
 
 module.exports = { processMovimentoCaixa, ExecuteJobCaixa };
 
