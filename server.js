@@ -35,8 +35,12 @@ router.get('/logo.png', (req, res) => {
 const liveLogs = [];
 const MAX_LOGS = 1000;
 const originalLog = console.log;
+const timestamp = new Date().toLocaleString('pt-BR', {
+    timeZone: 'America/Fortaleza',
+    hour12: false
+}).replace(',', '')
 console.log = (...args) => {
-    const msg = `[${new Date().toLocaleTimeString()}] ${args.join(' ')}`;
+    const msg = `[${timestamp}] ${args.join(' ')}`;
     liveLogs.push(msg);
     if (liveLogs.length > MAX_LOGS) liveLogs.shift();
     originalLog(msg);
