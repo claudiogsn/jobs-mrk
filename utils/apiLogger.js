@@ -23,18 +23,18 @@ async function callPHP(method, data) {
     const payload = { method, data };
 
     if (['itemVendaPayload', 'persistSales','persistMovimentoCaixa'].includes(method)) {
-        appendApiLog(`➡️ REQUEST: ${method} - Grande Demais`);
+        appendApiLog(`➡️ REQUEST: ${method} - Grande Demais - Payload não logado por segurança`);
     } else {
-        appendApiLog(`➡️ REQUEST: ${method} - ${JSON.stringify(payload)}`);
+        appendApiLog(`➡️ REQUEST: ${method} - ${JSON.stringify(payload)} - URL: ${process.env.BACKEND_URL}`);
     }
 
     try {
         const response = await axios.post(process.env.BACKEND_URL, payload);
-        appendApiLog(`✅ RESPONSE (${method}): ${JSON.stringify(response.data)}`);
+        appendApiLog(`✅ RESPONSE (${method}): ${JSON.stringify(response.data)} - URL: ${process.env.BACKEND_URL}`);
         return response.data;
     } catch (error) {
         const errorContent = error.response?.data || error.message || 'Erro desconhecido';
-        appendApiLog(`❌ ERROR (${method}): ${JSON.stringify(errorContent)}`);
+        appendApiLog(`❌ ERROR (${method}): ${JSON.stringify(errorContent)} - URL: ${process.env.BACKEND_URL}`);
         return null;
     }
 }
