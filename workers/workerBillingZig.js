@@ -71,10 +71,10 @@ async function getZigDadosEstatisticos(lojaId, data, tokenZig) {
             }
 
             const nomeProduto = (item.productName || '').toLowerCase();
-            if (nomeProduto.includes('gorjeta') && !gorjeta) {
+            if (nomeProduto.includes('gorjeta')) {
                 const gorj = parseInt(item.unitValue ?? 0);
                 if (!isNaN(gorj)) {
-                    gorjeta = gorj;
+                    gorjeta += gorj;
                 }
             }
         }

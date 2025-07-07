@@ -3,13 +3,6 @@ const { callPHP } = require('../utils/apiLogger');
 const { log } = require('../utils/logger');
 const axios = require('axios');
 
-const DESTINOS = [
-    { nome: 'Claudio', telefone: '5583999275543' }
-    ,{ nome: 'Paula', telefone: '5571991248941' }
-    ,{ nome: 'Edno', telefone: '5571992649337' }
-    ,{ nome: 'Pedro', telefone: '5571992501052' }
-];
-
 function formatCurrency(value) {
     return 'R$ ' + value.toFixed(2)
         .replace('.', ',')
@@ -69,9 +62,8 @@ async function sendWhatsappPdf(telefone, url) {
 }
 
 async function SendReportPdfWithResumo() {
-    
     const hoje = new Date();
-    const fimAtual = new Date(hoje.setDate(hoje.getDate() - hoje.getDay())); // último domingo
+    const fimAtual = new Date(hoje.setDate(hoje.getDate() - hoje.getDay()));
     const inicioAtual = new Date(fimAtual);
     inicioAtual.setDate(fimAtual.getDate() - 6);
 
@@ -83,47 +75,65 @@ async function SendReportPdfWithResumo() {
     dt_inicio_anterior.setDate(dt_inicio_anterior.getDate() - 7);
     dt_fim_anterior.setDate(dt_fim_anterior.getDate() - 7);
 
-    const resumoAtual = await callPHP('generateResumoFinanceiroPorGrupo', {
-        grupoId: 1,
-        dt_inicio,
-        dt_fim
+    // Busca dinâmica dos contatos
+    const contatosResp = await callPHP('getContatosByDisparo', {
+        id_disparo: 3
     });
 
-    const resumoAnterior = await callPHP('generateResumoFinanceiroPorGrupo', {
-        grupoId: 1,
-        dt_inicio: `${dt_inicio_anterior.toISOString().split('T')[0]} 00:00:00`,
-        dt_fim: `${dt_fim_anterior.toISOString().split('T')[0]} 23:59:59`
-    });
+    if (!contatosResp || !contatosResp.success || !contatosResp.data) {
+        log('❌ Erro ao buscar contatos', 'workerPdfResumo');
+        return;
+    }
 
-    const resumoAtualData = resumoAtual.data || [];
-    const resumoAnteriorData = resumoAnterior.data || [];
+    for (const contato of contatosResp.data) {
+        const { nome, telefone, grupos } = contato;
 
-    const resumoAtualTotal = {
-        faturamento_bruto: somarCampos(resumoAtualData, 'faturamento_bruto'),
-        descontos: somarCampos(resumoAtualData, 'descontos'),
-        taxa_servico: somarCampos(resumoAtualData, 'taxa_servico'),
-        faturamento_liquido: somarCampos(resumoAtualData, 'faturamento_liquido'),
-        numero_clientes: somarCampos(resumoAtualData, 'numero_clientes'),
-        numero_pedidos: somarCampos(resumoAtualData, 'numero_pedidos'),
-    };
+        for (const grupo of grupos) {
+            const grupoId = grupo.id;
+            const grupoNome = grupo.nome;
 
-    const resumoAnteriorTotal = {
-        faturamento_bruto: somarCampos(resumoAnteriorData, 'faturamento_bruto'),
-        descontos: somarCampos(resumoAnteriorData, 'descontos'),
-        taxa_servico: somarCampos(resumoAnteriorData, 'taxa_servico'),
-        faturamento_liquido: somarCampos(resumoAnteriorData, 'faturamento_liquido'),
-        numero_clientes: somarCampos(resumoAnteriorData, 'numero_clientes'),
-        numero_pedidos: somarCampos(resumoAnteriorData, 'numero_pedidos'),
-    };
+            const [resumoAtual, resumoAnterior] = await Promise.all([
+                callPHP('generateResumoFinanceiroPorGrupo', {
+                    grupoId,
+                    dt_inicio,
+                    dt_fim
+                }),
+                callPHP('generateResumoFinanceiroPorGrupo', {
+                    grupoId,
+                    dt_inicio: `${dt_inicio_anterior.toISOString().split('T')[0]} 00:00:00`,
+                    dt_fim: `${dt_fim_anterior.toISOString().split('T')[0]} 23:59:59`
+                })
+            ]);
 
-    const variacoes = {
-        faturamento_liquido: calcularVariacao(resumoAtualTotal.faturamento_liquido, resumoAnteriorTotal.faturamento_liquido),
-        numero_pedidos: calcularVariacao(resumoAtualTotal.numero_pedidos, resumoAnteriorTotal.numero_pedidos)
-    };
+            const resumoAtualData = resumoAtual.data || [];
+            const resumoAnteriorData = resumoAnterior.data || [];
 
-    const textoResumo = (nome) => `
+            const resumoAtualTotal = {
+                faturamento_bruto: somarCampos(resumoAtualData, 'faturamento_bruto'),
+                descontos: somarCampos(resumoAtualData, 'descontos'),
+                taxa_servico: somarCampos(resumoAtualData, 'taxa_servico'),
+                faturamento_liquido: somarCampos(resumoAtualData, 'faturamento_liquido'),
+                numero_clientes: somarCampos(resumoAtualData, 'numero_clientes'),
+                numero_pedidos: somarCampos(resumoAtualData, 'numero_pedidos'),
+            };
+
+            const resumoAnteriorTotal = {
+                faturamento_bruto: somarCampos(resumoAnteriorData, 'faturamento_bruto'),
+                descontos: somarCampos(resumoAnteriorData, 'descontos'),
+                taxa_servico: somarCampos(resumoAnteriorData, 'taxa_servico'),
+                faturamento_liquido: somarCampos(resumoAnteriorData, 'faturamento_liquido'),
+                numero_clientes: somarCampos(resumoAnteriorData, 'numero_clientes'),
+                numero_pedidos: somarCampos(resumoAnteriorData, 'numero_pedidos'),
+            };
+
+            const variacoes = {
+                faturamento_liquido: calcularVariacao(resumoAtualTotal.faturamento_liquido, resumoAnteriorTotal.faturamento_liquido),
+                numero_pedidos: calcularVariacao(resumoAtualTotal.numero_pedidos, resumoAnteriorTotal.numero_pedidos)
+            };
+
+            const textoResumo = `
 🌅 Bom dia, *${nome}*!
-Segue resumo da semana, referente aos dados de *faturamento (${inicioAtual.toLocaleDateString('pt-BR')} a ${fimAtual.toLocaleDateString('pt-BR')})*:
+Segue resumo semanal do *${grupoNome}*, referente a *${inicioAtual.toLocaleDateString('pt-BR')} a ${fimAtual.toLocaleDateString('pt-BR')}*:
 
 📊 *Consolidado Geral*
 💰 Bruto: ${formatCurrency(resumoAtualTotal.faturamento_bruto)} [Vs ${formatCurrency(resumoAnteriorTotal.faturamento_bruto)}]
@@ -134,25 +144,23 @@ Segue resumo da semana, referente aos dados de *faturamento (${inicioAtual.toLoc
 👥 Clientes: ${resumoAtualTotal.numero_clientes} [Vs ${resumoAnteriorTotal.numero_clientes}]
 📈 Ticket Médio: ${formatCurrency(resumoAtualTotal.faturamento_bruto / resumoAtualTotal.numero_clientes)} [Vs ${formatCurrency(resumoAnteriorTotal.faturamento_bruto / resumoAnteriorTotal.numero_clientes)}]
 
-Variação de Faturamento Liq.: ${variacoes.faturamento_liquido}
-Variação de N.Pedidos: ${variacoes.numero_pedidos}
+📊 Variações
+• Faturamento Líquido: ${variacoes.faturamento_liquido}
+• N. Pedidos: ${variacoes.numero_pedidos}
 ━━━━━━━━━━━━━━━━━━━
 
-Para mais detalhes ou uma análise segmentada por loja, por gentileza, verifique o arquivo que será enviado na sequência.
-`;
+O PDF com os detalhes será enviado a seguir.`;
 
-    const result = await callPHP('gerarPdfSemanal', { group_id: 1 });
+            const result = await callPHP('gerarPdfSemanal', { group_id: grupoId });
 
-    if (!result || !result.success || !result.url) {
-        log('❌ Erro ao gerar PDF semanal', 'workerPdfResumo');
-        return;
-    }
+            if (!result || !result.success || !result.url) {
+                log(`❌ Erro ao gerar PDF para grupo ${grupoNome}`, 'workerPdfResumo');
+                continue;
+            }
 
-    const pdfUrl = result.url;
-
-    for (const { nome, telefone } of DESTINOS) {
-        await sendWhatsappText(telefone, textoResumo(nome).trim());
-        await sendWhatsappPdf(telefone, pdfUrl);
+            await sendWhatsappText(telefone, textoResumo.trim());
+            await sendWhatsappPdf(telefone, result.url);
+        }
     }
 }
 
