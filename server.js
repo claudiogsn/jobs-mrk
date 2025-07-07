@@ -11,6 +11,8 @@ const { dispatchFinanceiro } = require('./workers/workerFinanceiro');
 const { DateTime } = require('luxon');
 const {gerarFilaWhatsapp} = require("./workers/WorkerDisparoFaturamento");
 const { SendReportPdfWithResumo } = require('./workers/WorkerSendReportPdfWeekly');
+const { agendarJobsDinamicos } = require('./cron/agendador');
+
 
 
 const app = express();
@@ -118,6 +120,17 @@ router.get('/run/wpp-pdf', async (req, res) => {
         res.status(500).send('❌ Erro ao executar o disparo de PDF semanal.');
     }
 });
+
+router.post('/reload-cron', async (req, res) => {
+    try {
+        await agendarJobsDinamicos();
+        res.send('🔄 Jobs recarregados com sucesso!');
+    } catch (err) {
+        log(`❌ Erro ao recarregar jobs: ${err.message}`, 'CronJob');
+        res.status(500).send('Erro ao recarregar jobs.');
+    }
+});
+
 
 
 // === Logs ===
