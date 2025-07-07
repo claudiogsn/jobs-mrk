@@ -10,6 +10,8 @@ const { processDocSaida } = require('./workers/workerCreateDocSaida');
 const { dispatchFinanceiro } = require('./workers/workerFinanceiro');
 const { DateTime } = require('luxon');
 const {gerarFilaWhatsapp} = require("./workers/WorkerDisparoFaturamento");
+const { SendReportPdfWithResumo } = require('./workers/WorkerSendReportPdfWeekly');
+
 
 const app = express();
 const router = express.Router();
@@ -106,6 +108,17 @@ router.get('/run/wpp', async (req, res) => {
     await gerarFilaWhatsapp();
     res.send('✅ Worker Disparo Fatuiramento.');
 });
+
+router.get('/run/wpp-pdf', async (req, res) => {
+    try {
+        await SendReportPdfWithResumo();
+        res.send('✅ Disparo de PDF semanal executado com sucesso.');
+    } catch (err) {
+        log(`❌ Erro ao executar WorkerSendReportPdfWeekly: ${err.message}`, 'ExpressServer');
+        res.status(500).send('❌ Erro ao executar o disparo de PDF semanal.');
+    }
+});
+
 
 // === Logs ===
 router.get('/logs', (req, res) => {
