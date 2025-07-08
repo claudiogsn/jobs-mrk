@@ -12,6 +12,8 @@ const { DateTime } = require('luxon');
 const {gerarFilaWhatsapp} = require("./workers/WorkerDisparoFaturamento");
 const { SendReportPdfWithResumo } = require('./workers/WorkerSendReportPdfWeekly');
 const { agendarJobsDinamicos } = require('./cron/agendador');
+const { enviarResumoParaContato } = require('./workers/WorkerReport');
+
 
 
 
@@ -133,6 +135,23 @@ router.post('/reload-cron', async (req, res) => {
         res.status(500).send('Erro ao recarregar jobs.');
     }
 });
+
+router.post('/run/resumo-contato', async (req, res) => {
+    const { contato, grupo } = req.body;
+
+    if (!contato?.nome || !contato?.telefone || !grupo?.id || !grupo?.nome) {
+        return res.status(400).send('❌ Parâmetros obrigatórios: contato {nome, telefone}, grupo {id, nome}');
+    }
+
+    try {
+        await enviarResumoParaContato(contato, grupo);
+        res.send(`✅ Resumo enviado para ${contato.nome} / Grupo ${grupo.nome}`);
+    } catch (err) {
+        log(`❌ Erro ao enviar resumo manual: ${err.message}`, 'ExpressServer');
+        res.status(500).send('❌ Erro ao enviar resumo.');
+    }
+});
+
 
 
 
