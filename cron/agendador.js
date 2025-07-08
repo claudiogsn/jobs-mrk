@@ -11,6 +11,7 @@ const jobMap = {
     gerarFilaWhatsappCMV: require('../workers/WorkerDisparoEstoque').gerarFilaWhatsappCMV,
     ExecuteJobFluxoEstoque: require('../workers/workerFluxoEstoque').ExecuteJobFluxoEstoque,
     SendReportPdfWithResumo: require('../workers/WorkerSendReportPdfWeekly').SendReportPdfWithResumo,
+    WorkerReport: require('../workers/WorkerReport').WorkerReport,
 
     // 🔧 Job de teste
     jobTesteLog: async () => {
