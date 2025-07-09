@@ -52,43 +52,66 @@ async function gerarPdfCompras(group_id) {
 }
 
 async function enviarResumoParaContato(contato, grupo) {
-    const hoje = new Date();
-    const fimAtual = new Date(hoje.setDate(hoje.getDate() - hoje.getDay() + 6));
-    const inicioAtual = new Date(fimAtual); inicioAtual.setDate(fimAtual.getDate() - 6);
-
-    const dt_inicio = `${inicioAtual.toISOString().split('T')[0]} 00:00:00`;
-    const dt_fim = `${fimAtual.toISOString().split('T')[0]} 23:59:59`;
-
-    const inicioAnt = new Date(inicioAtual); inicioAnt.setDate(inicioAnt.getDate() - 7);
-    const fimAnt = new Date(fimAtual); fimAnt.setDate(fimAnt.getDate() - 7);
-    const dt_inicio_anterior = `${inicioAnt.toISOString().split('T')[0]} 00:00:00`;
-    const dt_fim_anterior = `${fimAnt.toISOString().split('T')[0]} 23:59:59`;
-
+    const { nome, telefone } = contato;
     const grupoId = grupo.id;
     const grupoNome = grupo.nome;
-    const { nome, telefone } = contato;
 
-    const [resumoAtual, resumoAnterior] = await Promise.all([
+    const intervalos = await callPHP('getIntervalosSemanais', {});
+    const { dt_inicio, dt_fim, dt_inicio_anterior, dt_fim_anterior } = intervalos;
+
+    const dataInicioStr = dt_inicio.split(' ')[0].split('-').reverse().join('/');
+    const dataFimStr = dt_fim.split(' ')[0].split('-').reverse().join('/');
+
+    const [resumoAtual, resumoAnterior, notasAtual, notasAnterior] = await Promise.all([
         callPHP('generateResumoFinanceiroPorGrupo', { grupoId, dt_inicio, dt_fim }),
-        callPHP('generateResumoFinanceiroPorGrupo', { grupoId, dt_inicio: dt_inicio_anterior, dt_fim: dt_fim_anterior })
+        callPHP('generateResumoFinanceiroPorGrupo', { grupoId, dt_inicio: dt_inicio_anterior, dt_fim: dt_fim_anterior }),
+        callPHP('generateNotasPorGrupo', { grupoId, dt_inicio, dt_fim }),
+        callPHP('generateNotasPorGrupo', { grupoId, dt_inicio: dt_inicio_anterior, dt_fim: dt_fim_anterior })
     ]);
 
-    const [cmvAtual, cmvAnterior] = await Promise.all([
-        callPHP('generateResumoEstoquePorGrupoNAuth', { grupoId, dt_inicio, dt_fim }),
-        callPHP('generateResumoEstoquePorGrupoNAuth', { grupoId, dt_inicio: dt_inicio_anterior, dt_fim: dt_fim_anterior })
-    ]);
+    function somarResumo(lista) {
+        return lista.reduce((acc, item) => {
+            acc.faturamento_bruto += item.faturamento_bruto || 0;
+            acc.descontos += item.descontos || 0;
+            acc.taxa_servico += item.taxa_servico || 0;
+            acc.faturamento_liquido += item.faturamento_liquido || 0;
+            acc.numero_pedidos += item.numero_pedidos || 0;
+            acc.numero_clientes += item.numero_clientes || 0;
+            return acc;
+        }, {
+            faturamento_bruto: 0,
+            descontos: 0,
+            taxa_servico: 0,
+            faturamento_liquido: 0,
+            numero_pedidos: 0,
+            numero_clientes: 0
+        });
+    }
 
-    const rAtual = resumoAtual.data?.[0] || {};
-    const rAnt = resumoAnterior.data?.[0] || {};
-    const cAtual = cmvAtual.data?.[0] || {};
-    const cAnt = cmvAnterior.data?.[0] || {};
+    function somarNotas(resp) {
+        let total = 0;
+        for (const loja of resp?.data || []) {
+            for (const nota of loja.notas || []) {
+                total += parseFloat(nota.valor_total || 0);
+            }
+        }
+        return total;
+    }
+
+    const rAtual = somarResumo(resumoAtual.data || []);
+    const rAnt = somarResumo(resumoAnterior.data || []);
+    const comprasAtual = somarNotas(notasAtual);
+    const comprasAnterior = somarNotas(notasAnterior);
 
     const ticketAtual = rAtual.faturamento_bruto / (rAtual.numero_clientes || 1);
     const ticketAnt = rAnt.faturamento_bruto / (rAnt.numero_clientes || 1);
 
+    const percentualCMV = (rAtual.faturamento_bruto > 0) ? (comprasAtual / rAtual.faturamento_bruto) * 100 : 0;
+    const percentualCMVAnterior = (rAnt.faturamento_bruto > 0) ? (comprasAnterior / rAnt.faturamento_bruto) * 100 : 0;
+
     const corpoMensagem = `
-🌅 Bom tarde, ${nome}!
-Segue resumo semanal do ${grupoNome}, referente a ${inicioAtual.toLocaleDateString('pt-BR')} a ${fimAtual.toLocaleDateString('pt-BR')}:
+🌅 Bom tarde, *${nome}*!
+Segue resumo semanal do *${grupoNome}*, referente a ${dataInicioStr} a ${dataFimStr}:
 
 📊 Consolidado Faturamento
 💰 Bruto: ${formatCurrency(rAtual.faturamento_bruto)} [Vs ${formatCurrency(rAnt.faturamento_bruto)}]
@@ -105,13 +128,13 @@ Segue resumo semanal do ${grupoNome}, referente a ${inicioAtual.toLocaleDateStri
 ━━━━━━━━━━━━━━━━━━━
 
 📍 Consolidado Compras
-💰 Faturamento: ${formatCurrency(cAtual.faturamento_bruto)} [Vs ${formatCurrency(cAnt.faturamento_bruto)}]
-🛒 Compras: ${formatCurrency(cAtual.total_compras)} [Vs ${formatCurrency(cAnt.total_compras)}]
-📊 %CMV: ${cAtual.percentual_cmv?.toFixed(2) || '0.00'}% [Vs ${cAnt.percentual_cmv?.toFixed(2) || '0.00'}%]
- 
-Variação Faturamento: ${calcularVariacao(cAtual.faturamento_bruto, cAnt.faturamento_bruto)}
-Variação %CMV: ${calcularVariacao(cAtual.percentual_cmv, cAnt.percentual_cmv)}
-Variação Compras: ${calcularVariacao(cAtual.total_compras, cAnt.total_compras)}
+💰 Faturamento: ${formatCurrency(rAtual.faturamento_bruto)} [Vs ${formatCurrency(rAnt.faturamento_bruto)}]
+🛒 Compras: ${formatCurrency(comprasAtual)} [Vs ${formatCurrency(comprasAnterior)}]
+📊 %CMV: ${percentualCMV.toFixed(2)}% [Vs ${percentualCMVAnterior.toFixed(2)}%]
+
+Variação Faturamento: ${calcularVariacao(rAtual.faturamento_bruto, rAnt.faturamento_bruto)}
+Variação %CMV: ${calcularVariacao(percentualCMV, percentualCMVAnterior)}
+Variação Compras: ${calcularVariacao(comprasAtual, comprasAnterior)}
 ━━━━━━━━━━━━━━━━━━━
 
 O PDF com os detalhes será enviado a seguir.
