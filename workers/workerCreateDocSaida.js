@@ -49,8 +49,24 @@ async function ExecuteJobDocSaida() {
   const hoje = DateTime.local();
   const day = hoje.minus({ days: 1 });
 
-    log(`⏱️ Iniciando processDocSaida de ${day} às ${hoje.toFormat('HH:mm:ss')}`, 'workerCreateDocSaida');
-  await processDocSaida({ group_id, day });
+  log(`⏱️ Iniciando processDocSaida de ${day} às ${hoje.toFormat('HH:mm:ss')}`, 'workerCreateDocSaida');
+
+
+  const grupos = await callPHP('getGroupsToProcess', {});
+
+  if (!Array.isArray(grupos) || grupos.length === 0) {
+    log('⚠️ Nenhum grupo encontrado para processar.', 'workerCreateDocSaida');
+    return;
+  }
+
+  for (const grupo of grupos) {
+    const group_id = grupo.id;
+    const nomeGrupo = grupo.nome;
+    log(`🚀 Processando grupo: ${nomeGrupo} (ID: ${group_id})`, 'workerCreateDocSaida');
+    await processDocSaida({ group_id, day });
+    }
+
+
     log(`⏱️ Finalizando processDocSaida de ${day} às ${hoje.toFormat('HH:mm:ss')}`, 'workerCreateDocSaida');
 }
 

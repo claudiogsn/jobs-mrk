@@ -148,9 +148,22 @@ async function ExecuteJobItemVenda() {
 
     const dt_inicio = ontem.toFormat('yyyy-MM-dd');
     const dt_fim = hoje.toFormat('yyyy-MM-dd');
-
     log(`🚀 Iniciando job ItemVenda de ${dt_inicio} até ${dt_fim} às ${hoje.toFormat('HH:mm:ss')}`, 'workerItemVenda');
-    await processItemVenda({ group_id, dt_inicio, dt_fim });
+
+    const grupos = await callPHP('getGroupsToProcess', {});
+
+    if (!Array.isArray(grupos) || grupos.length === 0) {
+        log('⚠️ Nenhum grupo encontrado para processar.', 'workerItemVenda');
+        return;
+    }
+
+    for (const grupo of grupos) {
+        const group_id = grupo.id;
+        const nomeGrupo = grupo.nome;
+        log(`🚀 Processando grupo: ${nomeGrupo} (ID: ${group_id})`, 'workerItemVenda');
+        await processItemVenda({ group_id, dt_inicio, dt_fim });
+    }
+
     log(`✅ Job ItemVenda finalizado às ${hoje.toFormat('HH:mm:ss')}`, 'workerItemVenda');
 
     ExecuteJobStockZig();

@@ -50,7 +50,23 @@ async function ExecuteJobConsolidation() {
   const dt_fim = hoje.toFormat('yyyy-MM-dd');
 
   log(`⏱️ Iniciando job de ${dt_inicio} até ${dt_fim} às ${hoje.toFormat('HH:mm:ss')}`, 'workerConsolidation');
-  await processConsolidation({ group_id, dt_inicio, dt_fim });
+
+
+  const grupos = await callPHP('getGroupsToProcess', {});
+
+  if (!Array.isArray(grupos) || grupos.length === 0) {
+    log('⚠️ Nenhum grupo encontrado para processar.', 'workerConsolidation');
+    return;
+  }
+
+  for (const grupo of grupos) {
+    const group_id = grupo.id;
+    const nomeGrupo = grupo.nome;
+    log(`🚀 Processando grupo: ${nomeGrupo} (ID: ${group_id})`, 'workerConsolidation');
+    await processConsolidation({ group_id, dt_inicio, dt_fim });
+  }
+
+
   log(`🏁 Job finalizado às ${hoje.toFormat('HH:mm:ss')}`, 'workerConsolidation');
 }
 
