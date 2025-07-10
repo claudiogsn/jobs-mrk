@@ -11,40 +11,24 @@ const sqs = new SQSClient({
     }
 });
 
-const DESTINOS = [
-    { nome: 'Claudio', telefone: '5583999275543' }
-    ,{ nome: 'Paula', telefone: '5571991248941' }
-    ,{ nome: 'Edno', telefone: '5571992649337' }
-    ,{nome: 'Pedro', telefone: '5571992501052' }
-];
-
 function formatCurrency(value) {
-    return 'R$ ' + value.toFixed(2)
+    return 'R$ ' + (value || 0).toFixed(2)
         .replace('.', ',')
         .replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
-function calcularVariacao(ontem, semanaPassada) {
-    // Se o valor da semana passada for zero e o valor de ontem for maior que zero, consideramos 100% de aumento
-    if (semanaPassada === 0 && ontem > 0) {
-        return `100% 🟢`;  // Caso de aumento absoluto, pois a semana passada foi zero
-    }
-
-    // Se a divisão não for válida (por exemplo, quando ambos os valores forem zero), retornamos 0%
-    const percentual = ((ontem - semanaPassada) / semanaPassada) * 100;
-
-    if (isNaN(percentual) || !isFinite(percentual)) {
-        return '0% 🟠'; // Retorna '0%' se for NaN ou Infinity
-    }
-
-    // Definir o símbolo da seta com base no sinal da variação
-    const simboloSeta = percentual >= 0 ? '🟢' : '🔴';  // Seta para cima ou para baixo
-
-    return `${percentual.toFixed(2)}% ${simboloSeta}`;  // Adiciona a seta após a porcentagem
+function calcularVariacao(atual, anterior) {
+    if (anterior === 0 && atual > 0) return `100% 🟢`;
+    const percentual = ((atual - anterior) / anterior) * 100;
+    if (isNaN(percentual) || !isFinite(percentual)) return '0% 🟠';
+    return `${percentual.toFixed(2)}% ${percentual >= 0 ? '🟢' : '🔴'}`;
 }
 
-async function gerarFilaWhatsapp() {
-    const groupId = '1';
+
+async function enviarResumoDiario(contato, grupo) {
+    const { nome, telefone } = contato;
+    const groupId = grupo.id;
+    const grupoNome = grupo.nome;
 
     const hoje = new Date();
     const ontem = new Date(hoje);
@@ -53,19 +37,19 @@ async function gerarFilaWhatsapp() {
     const dt_inicio = `${ontem.toISOString().split('T')[0]} 00:00:00`;
     const dt_fim = `${ontem.toISOString().split('T')[0]} 23:59:59`;
 
-    // Calcular data de 7 dias atrás (mesmo dia da semana)
     const seteDiasAtras = new Date(ontem);
     seteDiasAtras.setDate(ontem.getDate() - 7);
     const dt_inicio_semanal = `${seteDiasAtras.toISOString().split('T')[0]} 00:00:00`;
     const dt_fim_semanal = `${seteDiasAtras.toISOString().split('T')[0]} 23:59:59`;
 
+    // Pega as lojas do grupo
     const unidades = await callPHP('getUnitsByGroup', { group_id: groupId });
     if (!Array.isArray(unidades)) {
-        log('❌ Erro: retorno inesperado de getUnitsByGroup', 'workerFila');
+        log(`❌ Erro: retorno inesperado de getUnitsByGroup para grupo ${grupoNome}`, 'enviarResumoDiario');
         return;
     }
 
-    let corpoMensagem = `Segue os dados de faturamento do dia *${dataRef}* por loja:\n\n━━━━━━━━━━━━━━━━━━━\n`;
+    let corpoMensagem = `Segue os dados de faturamento do dia *${dataRef}* por loja do grupo *${grupoNome}*:\n\n━━━━━━━━━━━━━━━━━━━\n`;
 
     const total = {
         faturamento_bruto: 0,
@@ -103,19 +87,9 @@ async function gerarFilaWhatsapp() {
         });
 
         if (!resumoOntem || !resumoSemanaPassada) {
-            log(`⚠️ Sem resumo para ${unitName}`, 'workerFila');
+            log(`⚠️ Sem resumo para ${unitName}`, 'enviarResumoDiario');
             continue;
         }
-
-        // Calculando variação percentual com o novo cálculo
-        const variacaoFaturamentoBruto = calcularVariacao(resumoOntem.faturamento_bruto, resumoSemanaPassada.faturamento_bruto);
-        const variacaoFaturamentoLiquido = calcularVariacao(resumoOntem.faturamento_liquido, resumoSemanaPassada.faturamento_liquido);
-        const variacaoDescontos = calcularVariacao(resumoOntem.descontos, resumoSemanaPassada.descontos);
-        const variacaoTaxaServico = calcularVariacao(resumoOntem.taxa_servico, resumoSemanaPassada.taxa_servico);
-        const variacaoTicketMedio = calcularVariacao(resumoOntem.ticket_medio, resumoSemanaPassada.ticket_medio);
-        const variacaoNumeroClientes = calcularVariacao(resumoOntem.numero_clientes, resumoSemanaPassada.numero_clientes);
-        const variacaoNumeroPedidos = calcularVariacao(resumoOntem.numero_pedidos, resumoSemanaPassada.numero_pedidos);
-
 
         corpoMensagem +=
             `📍 *${unitName}*
@@ -150,15 +124,6 @@ Variação de N.Pedidos: ${calcularVariacao(resumoOntem.numero_pedidos, resumoSe
         total.numero_pedidos_semanal += resumoSemanaPassada.numero_pedidos;
     }
 
-    // Cálculo da variação percentual no consolidado geral
-    const variacaoFaturamentoBrutoTotal = calcularVariacao(total.faturamento_bruto, total.faturamento_bruto_semanal);
-    const variacaoFaturamentoLiquidoTotal = calcularVariacao(total.faturamento_liquido, total.faturamento_liquido_semanal);
-    const variacaoDescontosTotal = calcularVariacao(total.descontos, total.descontos_semanal);
-    const variacaoTaxaServicoTotal = calcularVariacao(total.taxa_servico, total.taxa_servico_semanal);
-    const variacaoTicketMedioTotal = calcularVariacao(total.ticket_medio_soma, total.ticket_medio_soma_semanal);
-    const variacaoClientesTotal = calcularVariacao(total.numero_clientes, total.numero_clientes_semanal);
-    const variacaoNumeroPedidosTotal = calcularVariacao(total.numero_pedidos, total.numero_pedidos_semanal);
-
     if (total.lojas > 0) {
         corpoMensagem +=
             `📊 *Consolidado Geral*
@@ -175,33 +140,49 @@ Variação de N.Pedidos: ${calcularVariacao(resumoOntem.numero_pedidos, resumoSe
 `;
     }
 
-    for (const destinatario of DESTINOS) {
-        const mensagem =
-            `🌅 Bom dia, *${destinatario.nome}!*
+    const mensagem =
+        `🌅 Bom dia, *${nome}!*
 ${corpoMensagem.trim()}`;
 
-        const payload = {
-            telefone: destinatario.telefone,
-            mensagem
-        };
+    const payload = {
+        telefone,
+        mensagem
+    };
 
-        try {
-            await sqs.send(new SendMessageCommand({
-                QueueUrl: process.env.WHATSAPP_QUEUE_URL,
-                MessageBody: JSON.stringify(payload)
-            }));
+    try {
+        await sqs.send(new SendMessageCommand({
+            QueueUrl: process.env.WHATSAPP_QUEUE_URL,
+            MessageBody: JSON.stringify(payload)
+        }));
 
-            log(`✅ Mensagem enviada para ${destinatario.nome}`, 'workerFila');
-        } catch (err) {
-            log(`❌ Falha ao enviar para ${destinatario.nome}: ${err.message}`, 'workerFila');
+        log(`✅ Mensagem enviada para ${nome} (${telefone})`, 'enviarResumoDiario');
+    } catch (err) {
+        log(`❌ Falha ao enviar para ${nome}: ${err.message}`, 'enviarResumoDiario');
+    }
+}
+
+// Função worker para enviar para todos (chama enviarResumoDiario para cada contato+grupo)
+async function WorkerResumoDiario() {
+    const contatosResp = await callPHP('getContatosByDisparo', { id_disparo: 1 });
+    if (!contatosResp.success) {
+        log('❌ Erro ao buscar contatos', 'WorkerFilaWhatsapp');
+        return;
+    }
+
+    for (const contato of contatosResp.data) {
+        for (const grupo of contato.grupos) {
+            await enviarResumoDiario(contato, grupo);
         }
     }
 }
 
+// Exporta os dois para uso externo
+module.exports = {
+    enviarResumoDiario,
+    WorkerResumoDiario
+};
 
-
-module.exports = { gerarFilaWhatsapp };
-
+// Permite rodar como script também
 if (require.main === module) {
-    gerarFilaWhatsapp();
+    WorkerResumoDiario();
 }

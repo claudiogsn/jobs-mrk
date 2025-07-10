@@ -110,9 +110,6 @@ async function ExecuteJobCaixaZig(dt_inicio, dt_fim) {
         dt_fim = hoje;
     }
 
-    // dt_inicio = '2025-06-18';
-    // dt_fim = '2025-06-23';
-
     const start = DateTime.fromISO(dt_inicio);
     const end = DateTime.fromISO(dt_fim);
 

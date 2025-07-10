@@ -7,7 +7,7 @@ const jobMap = {
     ExecuteJobItemVenda: require('../workers/workerItemVenda').ExecuteJobItemVenda,
     ExecuteJobConsolidation: require('../workers/workerConsolidateSales').ExecuteJobConsolidation,
     ExecuteJobDocSaida: require('../workers/workerCreateDocSaida').ExecuteJobDocSaida,
-    gerarFilaWhatsapp: require('../workers/WorkerDisparoFaturamento').gerarFilaWhatsapp,
+    WorkerResumoDiario: require('../workers/WorkerDisparoFaturamento').WorkerResumoDiario,
     gerarFilaWhatsappCMV: require('../workers/WorkerDisparoEstoque').gerarFilaWhatsappCMV,
     ExecuteJobFluxoEstoque: require('../workers/workerFluxoEstoque').ExecuteJobFluxoEstoque,
     SendReportPdfWithResumo: require('../workers/WorkerSendReportPdfWeekly').SendReportPdfWithResumo,

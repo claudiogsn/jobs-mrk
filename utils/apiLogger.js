@@ -24,7 +24,8 @@ async function callPHP(method, data) {
     const payload = { method, data };
 
     if (['itemVendaPayload', 'persistSales','persistMovimentoCaixa'].includes(method)) {
-        appendApiLog(`➡️ REQUEST: ${method} - Grande Demais - Payload não logado por segurança`);
+        //appendApiLog(`➡️ REQUEST: ${method} - Grande Demais - Payload não logado por segurança`);
+        appendApiLog(`➡️ REQUEST: ${method} - ${JSON.stringify(payload)} - URL: ${process.env.BACKEND_URL}`);
     } else {
         appendApiLog(`➡️ REQUEST: ${method} - ${JSON.stringify(payload)} - URL: ${process.env.BACKEND_URL}`);
     }

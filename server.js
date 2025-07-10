@@ -9,10 +9,12 @@ const { processMovimentoCaixa } = require('./workers/workerMovimentoCaixa');
 const { processDocSaida } = require('./workers/workerCreateDocSaida');
 const { dispatchFinanceiro } = require('./workers/workerFinanceiro');
 const { DateTime } = require('luxon');
-const {gerarFilaWhatsapp} = require("./workers/WorkerDisparoFaturamento");
 const { SendReportPdfWithResumo } = require('./workers/WorkerSendReportPdfWeekly');
 const { agendarJobsDinamicos } = require('./cron/agendador');
 const { enviarResumoParaContato } = require('./workers/WorkerReport');
+const { enviarResumoDiario, WorkerResumoDiario } = require('./workers/WorkerDisparoFaturamento');
+const { ExecuteJobCaixaZig, processJobCaixaZig } = require('./workers/workerBillingZig');
+
 
 
 
@@ -54,7 +56,6 @@ console.log = (...args) => {
     originalLog(msg);
 };
 
-
 const formatDate = (dataISO) => {
     if (!dataISO) return '';
     const [ano, mes, dia] = dataISO.split('-');
@@ -84,6 +85,29 @@ router.post('/run/itemvenda', async (req, res) => {
     res.send(`✅ Worker - <strong>Importação da API Menew</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(dt_inicio)} até ${formatDate(dt_fim)}`);
 });
 
+router.post('/run/billingzig', async (req, res) => {
+    const { group_id, dt_inicio, dt_fim } = req.body;
+
+    if (!group_id || !dt_inicio || !dt_fim) {
+        return res.status(400).send('❌ Parâmetros obrigatórios: group_id, dt_inicio, dt_fim');
+    }
+
+    try {
+        const start = DateTime.fromISO(dt_inicio);
+        const end = DateTime.fromISO(dt_fim);
+
+        for (let cursor = start; cursor <= end; cursor = cursor.plus({ days: 1 })) {
+            const data = cursor.toFormat('yyyy-MM-dd');
+            await processJobCaixaZig(group_id, data);
+        }
+
+        res.send(`✅ Faturamento Zig executado com sucesso para o grupo ${group_id} de ${formatDate(dt_inicio)} até ${formatDate(dt_fim)}`);
+    } catch (err) {
+        log(`❌ Erro ao executar processJobCaixaZig: ${err.message}`, 'ExpressServer');
+        res.status(500).send('❌ Erro ao executar o faturamento Zig.');
+    }
+});
+
 router.post('/run/consolidate', async (req, res) => {
     const { group_id, dt_inicio, dt_fim } = req.body;
 
@@ -111,12 +135,14 @@ router.post('/run/financeiro', async (req, res) => {
     res.send('✅ Worker Financeiro iniciado.');
 });
 
-router.get('/run/wpp', async (req, res) => {
-    await gerarFilaWhatsapp();
+// === Workers de Resumo ===
+
+router.get('/run/wpp-diario', async (req, res) => {
+    await WorkerResumoDiario();
     res.send('✅ Worker Disparo Fatuiramento.');
 });
 
-router.get('/run/wpp-pdf', async (req, res) => {
+router.get('/run/wpp-semanal', async (req, res) => {
     try {
         await SendReportPdfWithResumo();
         res.send('✅ Disparo de PDF semanal executado com sucesso.');
@@ -126,17 +152,7 @@ router.get('/run/wpp-pdf', async (req, res) => {
     }
 });
 
-router.post('/reload-cron', async (req, res) => {
-    try {
-        await agendarJobsDinamicos();
-        res.send('🔄 Jobs recarregados com sucesso!');
-    } catch (err) {
-        log(`❌ Erro ao recarregar jobs: ${err.message}`, 'CronJob');
-        res.status(500).send('Erro ao recarregar jobs.');
-    }
-});
-
-router.post('/run/resumo-contato', async (req, res) => {
+router.post('/run/resumo-semanal', async (req, res) => {
     const { contato, grupo } = req.body;
 
     if (!contato?.nome || !contato?.telefone || !grupo?.id || !grupo?.nome) {
@@ -152,8 +168,33 @@ router.post('/run/resumo-contato', async (req, res) => {
     }
 });
 
+router.post('/run/resumo-diario', async (req, res) => {
+    const { contato, grupo } = req.body;
 
+    if (!contato?.nome || !contato?.telefone || !grupo?.id || !grupo?.nome) {
+        return res.status(400).send('❌ Parâmetros obrigatórios: contato {nome, telefone}, grupo {id, nome}');
+    }
 
+    try {
+        await enviarResumoDiario(contato, grupo);
+        res.send(`✅ Resumo enviado para ${contato.nome} / Grupo ${grupo.nome}`);
+    } catch (err) {
+        log(`❌ Erro ao enviar resumo manual: ${err.message}`, 'ExpressServer');
+        res.status(500).send('❌ Erro ao enviar resumo.');
+    }
+});
+
+// === Jobs Dinâmicos ===
+
+router.post('/reload-cron', async (req, res) => {
+    try {
+        await agendarJobsDinamicos();
+        res.send('🔄 Jobs recarregados com sucesso!');
+    } catch (err) {
+        log(`❌ Erro ao recarregar jobs: ${err.message}`, 'CronJob');
+        res.status(500).send('Erro ao recarregar jobs.');
+    }
+});
 
 // === Logs ===
 router.get('/logs', (req, res) => {
