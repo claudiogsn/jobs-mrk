@@ -137,12 +137,12 @@ router.post('/run/financeiro', async (req, res) => {
 
 // === Workers de Resumo ===
 
-router.get('/run/wpp-diario', async (req, res) => {
+router.post('/run/wpp-diario', async (req, res) => {
     await WorkerResumoDiario();
     res.send('✅ Worker Disparo Fatuiramento.');
 });
 
-router.get('/run/wpp-semanal', async (req, res) => {
+router.post('/run/wpp-semanal', async (req, res) => {
     try {
         await SendReportPdfWithResumo();
         res.send('✅ Disparo de PDF semanal executado com sucesso.');
