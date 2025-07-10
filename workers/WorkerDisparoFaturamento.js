@@ -30,17 +30,10 @@ async function enviarResumoDiario(contato, grupo) {
     const groupId = grupo.id;
     const grupoNome = grupo.nome;
 
-    const hoje = new Date();
-    const ontem = new Date(hoje);
-    ontem.setDate(hoje.getDate() - 1);
-    const dataRef = ontem.toLocaleDateString('pt-BR');
-    const dt_inicio = `${ontem.toISOString().split('T')[0]} 00:00:00`;
-    const dt_fim = `${ontem.toISOString().split('T')[0]} 23:59:59`;
-
-    const seteDiasAtras = new Date(ontem);
-    seteDiasAtras.setDate(ontem.getDate() - 7);
-    const dt_inicio_semanal = `${seteDiasAtras.toISOString().split('T')[0]} 00:00:00`;
-    const dt_fim_semanal = `${seteDiasAtras.toISOString().split('T')[0]} 23:59:59`;
+    // Busca os intervalos do backend
+    const intervalos = await callPHP('getIntervalosDiarios', {});
+    const { dt_inicio, dt_fim, dt_inicio_anterior, dt_fim_anterior } = intervalos;
+    const dataRef = dt_inicio.split(' ')[0].split('-').reverse().join('/');
 
     // Pega as lojas do grupo
     const unidades = await callPHP('getUnitsByGroup', { group_id: groupId });
@@ -72,18 +65,18 @@ async function enviarResumoDiario(contato, grupo) {
     for (const unidade of unidades) {
         const { custom_code, name: unitName } = unidade;
 
-        // Consulta para ontem
+        // Consulta para ontem (intervalo atual)
         const resumoOntem = await callPHP('generateResumoFinanceiroPorLoja', {
             lojaid: custom_code,
             dt_inicio,
             dt_fim
         });
 
-        // Consulta para 7 dias atrás
+        // Consulta para 7 dias atrás (intervalo anterior)
         const resumoSemanaPassada = await callPHP('generateResumoFinanceiroPorLoja', {
             lojaid: custom_code,
-            dt_inicio: dt_inicio_semanal,
-            dt_fim: dt_fim_semanal
+            dt_inicio: dt_inicio_anterior,
+            dt_fim: dt_fim_anterior
         });
 
         if (!resumoOntem || !resumoSemanaPassada) {
