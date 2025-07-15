@@ -15,6 +15,8 @@ async function callMenew(methodPayload, token) {
             }
         });
         appendApiLog(`✅ Menew call (${methodPayload?.requests?.method}): sucesso`);
+        appendApiLog(`➡️ REQUEST: ${methodPayload?.requests?.method} - ${JSON.stringify(methodPayload)} - URL: ${process.env.MENEW_URL}`);
+        appendApiLog(`✅ RESPONSE (${methodPayload?.requests?.method}): ${JSON.stringify(res.data)} - URL: ${process.env.MENEW_URL}`);
         return res.data;
     } catch (err) {
         appendApiLog(`❌ ERROR (${methodPayload?.requests?.method}): ${JSON.stringify(err.response?.data || err.message)}`);
@@ -142,7 +144,6 @@ async function processItemVenda({ group_id, dt_inicio, dt_fim } = {}) {
 
 
 async function ExecuteJobItemVenda() {
-    const group_id = process.env.GROUP_ID;
     const hoje = DateTime.local();
     const ontem = hoje.minus({ days: 1 });
 

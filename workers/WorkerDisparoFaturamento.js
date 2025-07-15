@@ -117,7 +117,7 @@ Variação de N.Pedidos: ${calcularVariacao(resumoOntem.numero_pedidos, resumoSe
         total.numero_pedidos_semanal += resumoSemanaPassada.numero_pedidos;
     }
 
-    if (total.lojas > 0) {
+    if (total.lojas > 1) {
         corpoMensagem +=
             `📊 *Consolidado Geral*
 💰 *Bruto:* *${formatCurrency(total.faturamento_bruto)}* [Vs ${formatCurrency(total.faturamento_bruto_semanal)}]
