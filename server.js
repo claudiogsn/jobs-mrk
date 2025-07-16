@@ -1,4 +1,5 @@
 require('dotenv').config();
+const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
@@ -13,7 +14,7 @@ const { SendReportPdfWithResumo } = require('./workers/WorkerSendReportPdfWeekly
 const { agendarJobsDinamicos } = require('./cron/agendador');
 const { enviarResumoParaContato } = require('./workers/WorkerReport');
 const { enviarResumoDiario, WorkerResumoDiario } = require('./workers/WorkerDisparoFaturamento');
-const { ExecuteJobCaixaZig, processJobCaixaZig } = require('./workers/workerBillingZig');
+const { processJobCaixaZig } = require('./workers/workerBillingZig');
 
 
 
@@ -22,8 +23,10 @@ const { ExecuteJobCaixaZig, processJobCaixaZig } = require('./workers/workerBill
 const app = express();
 const router = express.Router();
 
+const cors = require('cors');
+app.use(cors());
+
 const PORT = process.env.PORT || 3005;
-const DEFAULT_GROUP_ID = process.env.GROUP_ID;
 
 // middleware
 router.use(express.json());

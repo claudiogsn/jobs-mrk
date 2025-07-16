@@ -59,8 +59,8 @@ async function processJobCaixaZig(group_id, dataInicio, dataFim) {
 
 function gerarIntervaloDatas(inicio, fim) {
     const datas = [];
-    let atual = new Date(inicio);
-    const ultima = new Date(fim);
+    let atual = new Date(`${inicio}T00:00:00`);
+    const ultima = new Date(`${fim}T00:00:00`);
 
     while (atual <= ultima) {
         const ano = atual.getFullYear();
@@ -69,6 +69,7 @@ function gerarIntervaloDatas(inicio, fim) {
         datas.push(`${ano}-${mes}-${dia}`);
         atual.setDate(atual.getDate() + 1);
     }
+    console .log(`📅 Intervalo de datas gerado: ${datas.join(', ')}`, 'workerBillingZig');
 
     return datas;
 }
@@ -76,9 +77,9 @@ function gerarIntervaloDatas(inicio, fim) {
 
 async function getZigDadosEstatisticos(lojaId, data, tokenZig) {
     try {
-        const [saida, compradores] = await Promise.all([
+        const [saida, mesas] = await Promise.all([
             getZig('saida-produtos', lojaId, data, data, tokenZig),
-            getZig('compradores', lojaId, data, data, tokenZig)
+            getZig('tables', lojaId, data, data, tokenZig)
         ]);
 
         let descontos = 0;
@@ -100,41 +101,43 @@ async function getZigDadosEstatisticos(lojaId, data, tokenZig) {
             }
         }
 
-        // Filtrar clientes pagos e únicos por documento
-        const compradoresPagos = compradores.filter(c => c.isPaid === true);
-        const userDocuments = compradoresPagos.map(c => c.userDocument).filter(Boolean);
-        const total_clientes_unicos = new Set(userDocuments).size;
+        // Somar total de assentos
+        const total_clientes = mesas.reduce((soma, mesa) => {
+            const assentos = parseInt(mesa.numberOfSeats ?? 0);
+            return soma + (isNaN(assentos) ? 0 : assentos);
+        }, 0);
 
         return {
             descontos: parseFloat((descontos / 100).toFixed(2)),
             gorjeta: parseFloat((gorjeta / 100).toFixed(2)),
-            total_clientes: total_clientes_unicos,
-
+            total_clientes: total_clientes
         };
     } catch (err) {
         log(`❌ Erro ao buscar estatísticas do Zig para loja ${lojaId} em ${data}: ${err.message}`, 'workerBillingZig');
         return {
             descontos: 0,
             gorjeta: 0,
-            total_clientes: 0,
+            total_clientes: 0
         };
     }
 }
 
 
-async function ExecuteJobCaixaZig(dt_inicio, dt_fim) {
+async function ExecuteJobCaixaZig() {
     const hoje = DateTime.now().toISODate();
     const ontem = DateTime.now().minus({ days: 1 }).toISODate();
 
-    if (!dt_inicio || !dt_fim) {
-        dt_inicio = ontem;
-        dt_fim = hoje;
-    }
+    // dt_inicio = ontem;
+    // dt_fim = hoje;
+
+    let  dt_inicio = '2025-07-05'; // Data de início fixa para testes
+    let dt_fim = '2025-07-05'; // Data de fim fixa para testes
 
     const grupos = await callPHP('getGroupsToProcess', {});
 
     if (!Array.isArray(grupos) || grupos.length === 0) {
         log('⚠️ Nenhum grupo encontrado para processar.', 'workerBillingZig');
+
         return;
     }
 
