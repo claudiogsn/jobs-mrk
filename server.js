@@ -115,7 +115,7 @@ router.post('/run/consolidate', async (req, res) => {
         return res.status(400).send('❌ Parâmetros obrigatórios ausentes: group_id, dt_inicio, dt_fim');
     }
 
-    await processConsolidation({ group_id, dt_inicio, dt_fim });
+    await processConsolidation(group_id, dt_inicio, dt_fim);
     res.send(`✅ Worker - <strong>Sumarização das Vendas</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(dt_inicio)} até ${formatDate(dt_fim)}`);
 });
 

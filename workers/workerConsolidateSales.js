@@ -4,11 +4,7 @@ const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
 const { callPHP } = require('../utils/apiLogger');
 
-const groupId = process.env.GROUP_ID || '1';
-const startDate = DateTime.now().minus({ days: 1 }).toISODate();
-const endDate = startDate;
-
-async function processConsolidation() {
+async function processConsolidation(groupId,startDate,endDate) {
   const inicio = Date.now();
 
   log(`🔄 Iniciando consolidação para grupo ${groupId}`, 'workerConsolidation');
@@ -42,7 +38,6 @@ async function processConsolidation() {
 }
 
 async function ExecuteJobConsolidation() {
-  const group_id = process.env.GROUP_ID;
   const hoje = DateTime.local();
   const ontem = hoje.minus({ days: 1 });
 

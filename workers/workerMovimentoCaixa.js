@@ -3,7 +3,7 @@ const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
 const axios = require('axios');
 const { callPHP, appendApiLog } = require('../utils/apiLogger');
-const { ExecuteJobCaixaZig } = require('./workerBillingZig');
+const { processJobCaixaZig } = require('./workerBillingZig');
 
 async function callMenew(methodPayload, token) {
     try {
@@ -68,7 +68,7 @@ function adicionarSufixoSequencial(meios) {
 }
 
 async function processMovimentoCaixa({ group_id, dt_inicio, dt_fim } = {}) {
-    const groupId = parseInt(group_id ?? process.env.GROUP_ID);
+    const groupId = parseInt(group_id);
     const dataInicio = DateTime.fromISO(dt_inicio ?? DateTime.local().minus({ days: 1 }).toISODate());
     const dataFim = DateTime.fromISO(dt_fim ?? dataInicio.toISODate());
 
@@ -193,6 +193,8 @@ async function processMovimentoCaixa({ group_id, dt_inicio, dt_fim } = {}) {
 
         blocoInicio = blocoFim.plus({ days: 1 });
     }
+
+    await processJobCaixaZig(groupId, dt_inicio, dt_fim);
 }
 
 async function ExecuteJobCaixa() {
@@ -219,8 +221,6 @@ async function ExecuteJobCaixa() {
     }
 
     log(`🏁 Job finalizado às ${hoje.toFormat('HH:mm:ss')}`, 'workerMovimentoCaixa');
-
-    ExecuteJobCaixaZig();
 }
 
 module.exports = { processMovimentoCaixa, ExecuteJobCaixa };
