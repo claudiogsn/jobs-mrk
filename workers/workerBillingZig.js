@@ -137,13 +137,9 @@ async function getZigDadosEstatisticos(lojaId, data, tokenZig) {
 
 async function ExecuteJobCaixaZig() {
     const hoje = DateTime.now().toISODate();
-    const ontem = DateTime.now().minus({ days: 1 }).toISODate();
 
-    // dt_inicio = ontem;
-    // dt_fim = hoje;
-
-    let  dt_inicio = '2025-07-05'; // Data de início fixa para testes
-    let dt_fim = '2025-07-05'; // Data de fim fixa para testes
+    const dt_inicio = DateTime.now().minus({days: 1}).toISODate();
+    const dt_fim = hoje;
 
     const grupos = await callPHP('getGroupsToProcess', {});
 

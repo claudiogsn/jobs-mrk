@@ -76,12 +76,14 @@ async function processMovimentoCaixa({ group_id, dt_inicio, dt_fim } = {}) {
 
     if (!Array.isArray(unidades) || unidades.length === 0) {
         log('⚠️ Nenhuma unidade encontrada.', 'workerMovimentoCaixa');
+        await processJobCaixaZig(group_id, dt_inicio, dt_fim);
         return;
     }
 
     const authToken = await loginMenew();
     if (!authToken) {
         log('❌ Falha ao autenticar na Menew.', 'workerMovimentoCaixa');
+        await processJobCaixaZig(group_id, dt_inicio, dt_fim);
         return;
     }
 
@@ -194,7 +196,7 @@ async function processMovimentoCaixa({ group_id, dt_inicio, dt_fim } = {}) {
         blocoInicio = blocoFim.plus({ days: 1 });
     }
 
-    await processJobCaixaZig(groupId, dt_inicio, dt_fim);
+    await processJobCaixaZig(group_id, dt_inicio, dt_fim);
 }
 
 async function ExecuteJobCaixa() {

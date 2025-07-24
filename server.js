@@ -1,5 +1,4 @@
 require('dotenv').config();
-const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
@@ -23,8 +22,6 @@ const { processJobCaixaZig } = require('./workers/workerBillingZig');
 const app = express();
 const router = express.Router();
 
-const cors = require('cors');
-app.use(cors());
 
 const PORT = process.env.PORT || 3005;
 
@@ -96,13 +93,7 @@ router.post('/run/billingzig', async (req, res) => {
     }
 
     try {
-        const start = DateTime.fromISO(dt_inicio);
-        const end = DateTime.fromISO(dt_fim);
-
-        for (let cursor = start; cursor <= end; cursor = cursor.plus({ days: 1 })) {
-            const data = cursor.toFormat('yyyy-MM-dd');
-            await processJobCaixaZig(group_id, data);
-        }
+        await processJobCaixaZig(group_id, dt_inicio, dt_fim);
 
         res.send(`✅ Faturamento Zig executado com sucesso para o grupo ${group_id} de ${formatDate(dt_inicio)} até ${formatDate(dt_fim)}`);
     } catch (err) {
