@@ -25,7 +25,19 @@ async function processJobCaixaZig(group_id, dataInicio, dataFim) {
                 continue;
             }
 
-            const registros = await getZig('faturamento', lojaId, data, data, tokenZig);
+            const registrosOriginais = await getZig('faturamento', lojaId, data, data, tokenZig);
+
+            // Filtra os registros, separando os que são BÔNUS
+            const registros = [];
+            let valorBonus = 0;
+
+            for (const r of registrosOriginais) {
+                if (r.paymentName?.toUpperCase() === 'BÔNUS') {
+                    valorBonus += r.value || 0;
+                } else {
+                    registros.push(r);
+                }
+            }
 
             if (registros.length > 0) {
                 const payload = {
@@ -45,7 +57,7 @@ async function processJobCaixaZig(group_id, dataInicio, dataFim) {
                 data: {
                     data,
                     lojaId,
-                    descontos: estatisticas.descontos,
+                    descontos: (estatisticas.descontos || 0) + parseFloat((valorBonus / 100).toFixed(2)),
                     gorjeta: estatisticas.gorjeta,
                     total_clientes: estatisticas.total_clientes
                 }
