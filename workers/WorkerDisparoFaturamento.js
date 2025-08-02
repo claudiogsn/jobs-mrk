@@ -26,7 +26,10 @@ function calcularVariacao(atual, anterior) {
 
 
 async function enviarResumoDiario(contato, grupo) {
+    //const { nome, telefone } = contato;
     const { nome, telefone } = contato;
+    contato.nome = 'Claudio Gomes'; // Forçando nome para teste
+    contato.telefone = '5583999275543'; // Forçando telefone para teste
     const groupId = grupo.id;
     const grupoNome = grupo.nome;
 
@@ -84,18 +87,33 @@ async function enviarResumoDiario(contato, grupo) {
             continue;
         }
 
+        if (
+            resumoOntem.faturamento_bruto === 0 &&
+            resumoOntem.faturamento_liquido === 0 &&
+            resumoOntem.descontos === 0 &&
+            resumoOntem.taxa_servico === 0 &&
+            resumoOntem.numero_clientes === 0 &&
+            resumoOntem.numero_pedidos === 0
+        ) {
+            log(`⚠️ Loja ${unitName} sem faturamento no período. Ignorada.`, 'enviarResumoDiario');
+            continue;
+        }
+
         corpoMensagem +=
             `📍 *${unitName}*
 💰 Bruto: *${formatCurrency(resumoOntem.faturamento_bruto)}* [Vs ${formatCurrency(resumoSemanaPassada.faturamento_bruto)}]
 💵 Líquido: *${formatCurrency(resumoOntem.faturamento_liquido)}* [Vs ${formatCurrency(resumoSemanaPassada.faturamento_liquido)}]
-🗒 N.Pedidos: *${resumoOntem.numero_pedidos}* [Vs ${resumoSemanaPassada.numero_pedidos}]
+🗒 N.Pedidos Presencial: *${resumoOntem.pedidos_presencial || 0}* [Vs ${resumoSemanaPassada.pedidos_presencial}]
+🛵 N.Pedidos Delivery: *${resumoOntem.pedidos_delivery || 0}* [Vs ${resumoSemanaPassada.pedidos_delivery}]
 🎟 Descontos: *${formatCurrency(resumoOntem.descontos)}* [Vs ${formatCurrency(resumoSemanaPassada.descontos)}]
 🧾 Taxa Serviço: *${formatCurrency(resumoOntem.taxa_servico)}* [Vs ${formatCurrency(resumoSemanaPassada.taxa_servico)}]
 👥 Clientes: *${resumoOntem.numero_clientes}* [Vs ${resumoSemanaPassada.numero_clientes}]
 📈 Ticket Médio: *${formatCurrency(resumoOntem.ticket_medio)}* [Vs ${formatCurrency(resumoSemanaPassada.ticket_medio)}]
 
 Variação de Faturamento Liq.: ${calcularVariacao(resumoOntem.faturamento_liquido, resumoSemanaPassada.faturamento_liquido)}
-Variação de N.Pedidos: ${calcularVariacao(resumoOntem.numero_pedidos, resumoSemanaPassada.numero_pedidos)}
+Variação de N.Pedidos Presencial: ${calcularVariacao(resumoOntem.pedidos_presencial, resumoSemanaPassada.pedidos_presencial)}
+Variação de N.Pedidos Delivery: ${calcularVariacao(resumoOntem.pedidos_delivery, resumoSemanaPassada.pedidos_delivery)}
+
 ━━━━━━━━━━━━━━━━━━━
 `;
 
@@ -105,8 +123,13 @@ Variação de N.Pedidos: ${calcularVariacao(resumoOntem.numero_pedidos, resumoSe
         total.taxa_servico += resumoOntem.taxa_servico;
         total.numero_clientes += resumoOntem.numero_clientes;
         total.ticket_medio_soma += resumoOntem.ticket_medio;
-        total.numero_pedidos += resumoOntem.numero_pedidos;
+        total.numero_pedidos += resumoOntem.numero_pedidos;7
+        total.pedidos_presencial = (total.pedidos_presencial || 0) + (resumoOntem.pedidos_presencial || 0);
+        total.pedidos_delivery = (total.pedidos_delivery || 0) + (resumoOntem.pedidos_delivery || 0);
+
+
         total.lojas++;
+
 
         total.faturamento_bruto_semanal += resumoSemanaPassada.faturamento_bruto;
         total.faturamento_liquido_semanal += resumoSemanaPassada.faturamento_liquido;
@@ -115,6 +138,8 @@ Variação de N.Pedidos: ${calcularVariacao(resumoOntem.numero_pedidos, resumoSe
         total.ticket_medio_soma_semanal += resumoSemanaPassada.ticket_medio;
         total.numero_clientes_semanal += resumoSemanaPassada.numero_clientes;
         total.numero_pedidos_semanal += resumoSemanaPassada.numero_pedidos;
+        total.pedidos_presencial_semanal = (total.pedidos_presencial_semanal || 0) + (resumoSemanaPassada.pedidos_presencial || 0);
+        total.pedidos_delivery_semanal = (total.pedidos_delivery_semanal || 0) + (resumoSemanaPassada.pedidos_delivery || 0);
     }
 
     if (total.lojas > 1) {
@@ -122,19 +147,25 @@ Variação de N.Pedidos: ${calcularVariacao(resumoOntem.numero_pedidos, resumoSe
             `📊 *Consolidado Geral*
 💰 *Bruto:* *${formatCurrency(total.faturamento_bruto)}* [Vs ${formatCurrency(total.faturamento_bruto_semanal)}]
 💵 *Líquido:* *${formatCurrency(total.faturamento_liquido)}* [Vs ${formatCurrency(total.faturamento_liquido_semanal)}]
-🗒 *N.Pedidos:* *${total.numero_pedidos}* [Vs ${total.numero_pedidos_semanal}]
+🗒 *N.Pedidos Presencial:* *${total.pedidos_presencial || 0}* [Vs ${total.pedidos_presencial_semanal}]
+🛵 *N.Pedidos Delivery:* *${total.pedidos_delivery || 0}* [Vs ${total.pedidos_delivery_semanal}]
 🎟 *Descontos:* *${formatCurrency(total.descontos)}* [Vs ${formatCurrency(total.descontos_semanal)}]
 🧾 *Taxa Serviço:* *${formatCurrency(total.taxa_servico)}* [Vs ${formatCurrency(total.taxa_servico_semanal)}]
 👥 *Clientes:* *${total.numero_clientes}* [Vs ${total.numero_clientes_semanal}]
 📈 *Ticket Médio:* *${formatCurrency(total.ticket_medio_soma / total.lojas)}* [Vs ${formatCurrency(total.ticket_medio_soma_semanal / total.lojas)}]
 
 *Variação de Faturamento Liq.:* ${calcularVariacao(total.faturamento_liquido, total.faturamento_liquido_semanal)}
-*Variação de N.Pedidos:* ${calcularVariacao(total.numero_pedidos, total.numero_pedidos_semanal)}
+*Variação de N.Pedidos Presencial:* ${calcularVariacao(total.pedidos_presencial, total.pedidos_presencial_semanal)}
+*Variação de N.Pedidos Delivery:* ${calcularVariacao(total.pedidos_delivery, total.pedidos_delivery_semanal)}
 `;
     }
 
-    const mensagem =
-        `🌅 Bom dia, *${nome}!*
+    if (total.lojas === 0) {
+        log(`🚫 Nenhuma loja com faturamento para ${nome} (${grupoNome}). Mensagem não enviada.`, 'enviarResumoDiario');
+        return;
+    }
+
+    const mensagem = `🌅 Bom dia, *${nome}!*
 ${corpoMensagem.trim()}`;
 
     const payload = {

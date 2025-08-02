@@ -1,4 +1,3 @@
-// Worker: workerFinanceiro.js
 require('dotenv').config();
 const { log } = require('../utils/logger');
 const axios = require('axios');
