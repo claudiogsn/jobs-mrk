@@ -3,17 +3,19 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const { getLogs,log} = require('./utils/logger');
+
 const { processItemVenda } = require('./workers/workerItemVenda');
 const { processConsolidation } = require('./workers/workerConsolidateSales');
 const { processMovimentoCaixa } = require('./workers/workerMovimentoCaixa');
 const { processDocSaida } = require('./workers/workerCreateDocSaida');
 const { dispatchFinanceiro } = require('./workers/workerFinanceiro');
-const { DateTime } = require('luxon');
-const { SendReportPdfWithResumo } = require('./workers/WorkerSendReportPdfWeekly');
-const { agendarJobsDinamicos } = require('./cron/agendador');
-const { enviarResumoParaContato } = require('./workers/WorkerReport');
-const { enviarResumoDiario, WorkerResumoDiario } = require('./workers/WorkerDisparoFaturamento');
 const { processJobCaixaZig } = require('./workers/workerBillingZig');
+
+const { agendarJobsDinamicos } = require('./cron/agendador');
+
+const { enviarResumoSemanal, WorkerReportPdfWeekly } = require('./workers/WorkerReportPdfWeekly');
+const { enviarResumoDiario, WorkerResumoDiario } = require('./workers/WorkerDisparoFaturamento');
+
 
 
 
@@ -138,10 +140,10 @@ router.post('/run/wpp-diario', async (req, res) => {
 
 router.post('/run/wpp-semanal', async (req, res) => {
     try {
-        await SendReportPdfWithResumo();
+        await WorkerReportPdfWeekly();
         res.send('✅ Disparo de PDF semanal executado com sucesso.');
     } catch (err) {
-        log(`❌ Erro ao executar WorkerSendReportPdfWeekly: ${err.message}`, 'ExpressServer');
+        log(`❌ Erro ao executar WorkerReportPdfWeekly: ${err.message}`, 'ExpressServer');
         res.status(500).send('❌ Erro ao executar o disparo de PDF semanal.');
     }
 });
@@ -154,7 +156,7 @@ router.post('/run/resumo-semanal', async (req, res) => {
     }
 
     try {
-        await enviarResumoParaContato(contato, grupo);
+        await enviarResumoSemanal(contato, grupo);
         res.send(`✅ Resumo enviado para ${contato.nome} / Grupo ${grupo.nome}`);
     } catch (err) {
         log(`❌ Erro ao enviar resumo manual: ${err.message}`, 'ExpressServer');

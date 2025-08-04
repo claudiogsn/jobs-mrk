@@ -2,7 +2,7 @@ require('dotenv').config();
 
 const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
-const { callPHP } = require('../utils/apiLogger');
+const { callPHP } = require('../utils/utils');
 
 async function processConsolidation(groupId,startDate,endDate) {
   const inicio = Date.now();

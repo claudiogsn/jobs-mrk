@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
-const { callPHP, getZig } = require('../utils/apiLogger');
+const { callPHP, getZig } = require('../utils/utils');
 
 async function processJobCaixaZig(group_id, dataInicio, dataFim) {
     const lojas = await callPHP('getUnitsIntegrationZigBilling', { group_id });
@@ -86,7 +86,6 @@ function gerarIntervaloDatas(inicio, fim) {
     return datas;
 }
 
-
 async function getZigDadosEstatisticos(lojaId, data, tokenZig) {
     try {
         const [saida, mesas] = await Promise.all([
@@ -134,7 +133,6 @@ async function getZigDadosEstatisticos(lojaId, data, tokenZig) {
     }
 }
 
-
 async function ExecuteJobCaixaZig() {
     const hoje = DateTime.now().toISODate();
 
@@ -161,10 +159,8 @@ async function ExecuteJobCaixaZig() {
     }
 }
 
-
 module.exports = { processJobCaixaZig, ExecuteJobCaixaZig };
 
-// Execução direta via terminal
 if (require.main === module) {
     ExecuteJobCaixaZig();
 }

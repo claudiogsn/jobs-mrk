@@ -1,55 +1,9 @@
 require('dotenv').config();
 const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
-const axios = require('axios');
-const { callPHP, appendApiLog } = require('../utils/apiLogger');
+const { callPHP, loginMenew, callMenew} = require('../utils/utils');
 const { ExecuteJobStockZig } = require('./workerStockZig');
 
-
-async function callMenew(methodPayload, token) {
-    try {
-        const res = await axios.post(process.env.MENEW_URL, methodPayload, {
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
-        });
-        appendApiLog(`✅ Menew call (${methodPayload?.requests?.method}): sucesso`);
-        appendApiLog(`➡️ REQUEST: ${methodPayload?.requests?.method} - ${JSON.stringify(methodPayload)} - URL: ${process.env.MENEW_URL}`);
-        appendApiLog(`✅ RESPONSE (${methodPayload?.requests?.method}): ${JSON.stringify(res.data)} - URL: ${process.env.MENEW_URL}`);
-        return res.data;
-    } catch (err) {
-        appendApiLog(`❌ ERROR (${methodPayload?.requests?.method}): ${JSON.stringify(err.response?.data || err.message)}`);
-        return null;
-    }
-}
-
-async function loginMenew() {
-    const payload = {
-        token: null,
-        requests: {
-            jsonrpc: '2.0',
-            method: 'Usuario/login',
-            params: {
-                usuario: 'batech',
-                token: 'X7K1g6VJLrcWPM2adw2O'
-            },
-            id: '1'
-        }
-    };
-
-    try {
-        const response = await axios.post(process.env.MENEW_URL, payload, {
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        appendApiLog(`✅ Login Menew: sucesso - token recebido`);
-        return response.data?.result || null;
-    } catch (err) {
-        appendApiLog(`❌ Erro ao fazer login na Menew: ${JSON.stringify(err.response?.data || err.message)}`);
-        return null;
-    }
-}
 
 async function processItemVenda({ group_id, dt_inicio, dt_fim } = {}) {
     const groupId = parseInt(group_id ?? process.env.GROUP_ID);
@@ -167,7 +121,7 @@ async function ExecuteJobItemVenda() {
 
     log(`✅ Job ItemVenda finalizado às ${hoje.toFormat('HH:mm:ss')}`, 'workerItemVenda');
 
-    ExecuteJobStockZig();
+    await ExecuteJobStockZig();
 }
 
 module.exports = { processItemVenda, ExecuteJobItemVenda };

@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { callPHP } = require('../utils/apiLogger');
+const { callPHP } = require('../utils/utils');
 const { log } = require('../utils/logger');
 const axios = require('axios');
 

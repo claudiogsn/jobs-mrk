@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { log } = require('../utils/logger');
-const { callPHP } = require('../utils/apiLogger');
+const { callPHP } = require('../utils/utils');
 const { DateTime } = require('luxon');
 
 async function processDocSaida({ group_id, data } = {}) {
@@ -45,7 +45,6 @@ async function processDocSaida({ group_id, data } = {}) {
 }
 
 async function ExecuteJobDocSaida() {
-  const group_id = process.env.GROUP_ID;
   const hoje = DateTime.local();
   const day = hoje.minus({ days: 1 });
 

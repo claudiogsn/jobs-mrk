@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
-const { callPHP } = require('../utils/apiLogger');
+const { callPHP, formatCurrency, calcularVariacao} = require('../utils/utils');
 const { log } = require('../utils/logger');
 
 const sqs = new SQSClient({
@@ -11,29 +11,11 @@ const sqs = new SQSClient({
     }
 });
 
-function formatCurrency(value) {
-    return 'R$ ' + (value || 0).toFixed(2)
-        .replace('.', ',')
-        .replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-}
-
-function calcularVariacao(atual, anterior) {
-    if (anterior === 0 && atual > 0) return `100% 🟢`;
-    const percentual = ((atual - anterior) / anterior) * 100;
-    if (isNaN(percentual) || !isFinite(percentual)) return '0% 🟠';
-    return `${percentual.toFixed(2)}% ${percentual >= 0 ? '🟢' : '🔴'}`;
-}
-
-
 async function enviarResumoDiario(contato, grupo) {
-    //const { nome, telefone } = contato;
     const { nome, telefone } = contato;
-    contato.nome = 'Claudio Gomes'; // Forçando nome para teste
-    contato.telefone = '5583999275543'; // Forçando telefone para teste
     const groupId = grupo.id;
     const grupoNome = grupo.nome;
 
-    // Busca os intervalos do backend
     const intervalos = await callPHP('getIntervalosDiarios', {});
     const { dt_inicio, dt_fim, dt_inicio_anterior, dt_fim_anterior } = intervalos;
     const dataRef = dt_inicio.split(' ')[0].split('-').reverse().join('/');
@@ -75,7 +57,6 @@ async function enviarResumoDiario(contato, grupo) {
             dt_fim
         });
 
-        // Consulta para 7 dias atrás (intervalo anterior)
         const resumoSemanaPassada = await callPHP('generateResumoFinanceiroPorLoja', {
             lojaid: custom_code,
             dt_inicio: dt_inicio_anterior,
@@ -185,7 +166,6 @@ ${corpoMensagem.trim()}`;
     }
 }
 
-// Função worker para enviar para todos (chama enviarResumoDiario para cada contato+grupo)
 async function WorkerResumoDiario() {
     const contatosResp = await callPHP('getContatosByDisparo', { id_disparo: 1 });
     if (!contatosResp.success) {
@@ -200,13 +180,11 @@ async function WorkerResumoDiario() {
     }
 }
 
-// Exporta os dois para uso externo
 module.exports = {
     enviarResumoDiario,
     WorkerResumoDiario
 };
 
-// Permite rodar como script também
 if (require.main === module) {
     WorkerResumoDiario();
 }

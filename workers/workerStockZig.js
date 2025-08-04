@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { DateTime } = require('luxon');
-const { callPHP, getZig } = require('../utils/apiLogger');
+const { callPHP, getZig } = require('../utils/utils');
 const { log } = require('../utils/logger');
 
 async function ProcessJobStockZig(group_id, data) {
@@ -87,9 +87,6 @@ async function ExecuteJobStockZig(dt_inicio, dt_fim) {
         dt_inicio = ontem;
         dt_fim = hoje;
     }
-
-    // dt_inicio = '2025-04-01';
-    // dt_fim = '2025-06-23';
 
     const start = DateTime.fromISO(dt_inicio);
     const end = DateTime.fromISO(dt_fim);

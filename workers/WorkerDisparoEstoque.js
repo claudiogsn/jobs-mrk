@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
-const { callPHP } = require('../utils/apiLogger');
+const { callPHP } = require('../utils/utils');
 const { log } = require('../utils/logger');
 
 const sqs = new SQSClient({

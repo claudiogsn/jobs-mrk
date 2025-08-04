@@ -1,45 +1,8 @@
 require('dotenv').config();
-const { callPHP } = require('../utils/apiLogger');
+const { callPHP, formatCurrency, calcularVariacao, sendWhatsappPdf, sendWhatsappText} = require('../utils/utils');
 const { log } = require('../utils/logger');
 const axios = require('axios');
 
-function formatCurrency(value) {
-    return 'R$ ' + (value || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-}
-
-function calcularVariacao(atual, anterior) {
-    if (anterior === 0 && atual > 0) return `100% 🟢`;
-    const percentual = ((atual - anterior) / anterior) * 100;
-    if (isNaN(percentual) || !isFinite(percentual)) return '0% 🟠';
-    return `${percentual.toFixed(2)}% ${percentual >= 0 ? '🟢' : '🔴'}`;
-}
-
-async function sendWhatsappText(telefone, mensagem) {
-    try {
-        await axios.post(
-            `${process.env.ZAPI_BASE_URL}/instances/${process.env.ZAPI_INSTANCE_ID}/token/${process.env.ZAPI_INSTANCE_TOKEN}/send-text`,
-            { phone: telefone, message: mensagem },
-            { headers: { 'Content-Type': 'application/json', 'Client-Token': process.env.ZAPI_CLIENT_TOKEN } }
-        );
-        log(`📤 Texto enviado para ${telefone}`, 'WorkerReport');
-    } catch (err) {
-        log(`❌ Erro ao enviar texto: ${err.message}`, 'WorkerReport');
-    }
-}
-
-async function sendWhatsappPdf(telefone, url) {
-    const fileName = url.split('/').pop();
-    try {
-        await axios.post(
-            `${process.env.ZAPI_BASE_URL}/instances/${process.env.ZAPI_INSTANCE_ID}/token/${process.env.ZAPI_INSTANCE_TOKEN}/send-document/pdf`,
-            { phone: telefone, document: url, fileName },
-            { headers: { 'Content-Type': 'application/json', 'Client-Token': process.env.ZAPI_CLIENT_TOKEN } }
-        );
-        log(`📎 PDF ${fileName} enviado para ${telefone}`, 'WorkerReport');
-    } catch (err) {
-        log(`❌ Erro ao enviar PDF: ${err.message}`, 'WorkerReport');
-    }
-}
 
 async function gerarPdfFaturamento(group_id) {
     const result = await callPHP('gerarPdfSemanalFaturamento', { group_id });
@@ -51,7 +14,7 @@ async function gerarPdfCompras(group_id) {
     return result.success ? result.url : null;
 }
 
-async function enviarResumoParaContato(contato, grupo) {
+async function enviarResumoSemanal(contato, grupo) {
     const { nome, telefone } = contato;
     const grupoId = grupo.id;
     const grupoNome = grupo.nome;
@@ -153,28 +116,26 @@ O PDF com os detalhes será enviado a seguir.
     return true;
 }
 
-async function WorkerReport() {
+async function WorkerReportPdfWeekly() {
     const contatosResp = await callPHP('getContatosByDisparo', { id_disparo: 3 });
 
     if (!contatosResp.success) {
-        log('❌ Erro ao buscar contatos', 'WorkerReport');
+        log('❌ Erro ao buscar contatos', 'WorkerReportPdfWeekly');
         return;
     }
 
     for (const contato of contatosResp.data) {
         for (const grupo of contato.grupos) {
-            await enviarResumoParaContato(contato, grupo);
+            await enviarResumoSemanal(contato, grupo);
         }
     }
 }
 
 module.exports = {
-    WorkerReport,
-    gerarPdfFaturamento,
-    gerarPdfCompras,
-    enviarResumoParaContato
+    WorkerReportPdfWeekly,
+    enviarResumoSemanal
 };
 
 if (require.main === module) {
-    WorkerReport();
+    WorkerReportPdfWeekly();
 }

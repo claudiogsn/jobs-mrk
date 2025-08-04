@@ -1,17 +1,16 @@
 const cron = require('node-cron');
-const mysql = require('mysql2/promise');
 const { log } = require('../utils/logger');
+const { getConnection } = require('../utils/utils');
 
 const jobMap = {
     ExecuteJobCaixa: require('../workers/workerMovimentoCaixa').ExecuteJobCaixa,
     ExecuteJobItemVenda: require('../workers/workerItemVenda').ExecuteJobItemVenda,
     ExecuteJobConsolidation: require('../workers/workerConsolidateSales').ExecuteJobConsolidation,
     ExecuteJobDocSaida: require('../workers/workerCreateDocSaida').ExecuteJobDocSaida,
-    WorkerResumoDiario: require('../workers/WorkerDisparoFaturamento').WorkerResumoDiario,
     gerarFilaWhatsappCMV: require('../workers/WorkerDisparoEstoque').gerarFilaWhatsappCMV,
     ExecuteJobFluxoEstoque: require('../workers/workerFluxoEstoque').ExecuteJobFluxoEstoque,
-    SendReportPdfWithResumo: require('../workers/WorkerSendReportPdfWeekly').SendReportPdfWithResumo,
-    WorkerReport: require('../workers/WorkerReport').WorkerReport,
+    WorkerResumoDiario: require('../workers/WorkerDisparoFaturamento').WorkerResumoDiario,
+    WorkerReportPdfWeekly: require('../workers/WorkerReportPdfWeekly').WorkerReportPdfWeekly,
 
     // 🔧 Job de teste
     jobTesteLog: async () => {
@@ -21,15 +20,6 @@ const jobMap = {
 };
 
 let jobsAgendados = [];
-
-async function getConnection() {
-    return await mysql.createConnection({
-        host: process.env.DB_HOST,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASS,
-        database: process.env.DB_NAME
-    });
-}
 
 async function agendarJobsDinamicos() {
     const conn = await getConnection();
