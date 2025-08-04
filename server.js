@@ -13,38 +13,35 @@ const { processJobCaixaZig } = require('./workers/workerBillingZig');
 
 const { agendarJobsDinamicos } = require('./cron/agendador');
 
-const { enviarResumoSemanal, WorkerReportPdfWeekly } = require('./workers/WorkerReportPdfWeekly');
 const { enviarResumoDiario, WorkerResumoDiario } = require('./workers/WorkerDisparoFaturamento');
-
-
-
-
+const { enviarResumoSemanal, WorkerReportPdfWeekly } = require('./workers/WorkerReportPdfWeekly');
+const { enviarResumoMensal, WorkerReportPdfMonthly } = require('./workers/WorkerReportPdfMonthly');
 
 
 const app = express();
 const router = express.Router();
-
-
 const PORT = process.env.PORT || 3005;
+const liveLogs = [];
+const MAX_LOGS = 1000;
+const originalLog = console.log;
 
-// middleware
+const formatDate = (dataISO) => {
+    if (!dataISO) return '';
+    const [ano, mes, dia] = dataISO.split('-');
+    return `${dia}/${mes}/${ano}`;
+};
+
 router.use(express.json());
+
 router.use('/assets', express.static(path.join(__dirname, 'assets')));
 
-// favicon
 router.get('/favicon.ico', (req, res) => {
     res.sendFile(path.join(__dirname, 'assets/favicon.ico'));
 });
 
-// logo
 router.get('/logo.png', (req, res) => {
     res.sendFile(path.join(__dirname, 'assets/logo.png'));
 });
-
-
-const liveLogs = [];
-const MAX_LOGS = 1000;
-const originalLog = console.log;
 
 console.log = (...args) => {
     const timestamp = new Date().toLocaleString('pt-BR', {
@@ -57,13 +54,6 @@ console.log = (...args) => {
     if (liveLogs.length > MAX_LOGS) liveLogs.shift();
     originalLog(msg);
 };
-
-const formatDate = (dataISO) => {
-    if (!dataISO) return '';
-    const [ano, mes, dia] = dataISO.split('-');
-    return `${dia}/${mes}/${ano}`;
-};
-
 // === Workers ===
 router.post('/run/movimentocaixa', async (req, res) => {
     const { group_id, dt_inicio, dt_fim } = req.body;
@@ -130,9 +120,7 @@ router.post('/run/financeiro', async (req, res) => {
     await dispatchFinanceiro();
     res.send('✅ Worker Financeiro iniciado.');
 });
-
-// === Workers de Resumo ===
-
+// === Workers de Whatsapp ===
 router.post('/run/wpp-diario', async (req, res) => {
     await WorkerResumoDiario();
     res.send('✅ Worker Disparo Fatuiramento.');
@@ -148,19 +136,13 @@ router.post('/run/wpp-semanal', async (req, res) => {
     }
 });
 
-router.post('/run/resumo-semanal', async (req, res) => {
-    const { contato, grupo } = req.body;
-
-    if (!contato?.nome || !contato?.telefone || !grupo?.id || !grupo?.nome) {
-        return res.status(400).send('❌ Parâmetros obrigatórios: contato {nome, telefone}, grupo {id, nome}');
-    }
-
+router.post('/run/wpp-mensal', async (req, res) => {
     try {
-        await enviarResumoSemanal(contato, grupo);
-        res.send(`✅ Resumo enviado para ${contato.nome} / Grupo ${grupo.nome}`);
+        await WorkerReportPdfMonthly();
+        res.send('✅ Disparo de PDF mensal executado com sucesso.');
     } catch (err) {
-        log(`❌ Erro ao enviar resumo manual: ${err.message}`, 'ExpressServer');
-        res.status(500).send('❌ Erro ao enviar resumo.');
+        log(`❌ Erro ao executar WorkerReportPdfMonthly: ${err.message}`, 'ExpressServer');
+        res.status(500).send('❌ Erro ao executar o disparo de PDF semanal.');
     }
 });
 
@@ -180,8 +162,38 @@ router.post('/run/resumo-diario', async (req, res) => {
     }
 });
 
-// === Jobs Dinâmicos ===
+router.post('/run/resumo-semanal', async (req, res) => {
+    const { contato, grupo } = req.body;
 
+    if (!contato?.nome || !contato?.telefone || !grupo?.id || !grupo?.nome) {
+        return res.status(400).send('❌ Parâmetros obrigatórios: contato {nome, telefone}, grupo {id, nome}');
+    }
+
+    try {
+        await enviarResumoSemanal(contato, grupo);
+        res.send(`✅ Resumo enviado para ${contato.nome} / Grupo ${grupo.nome}`);
+    } catch (err) {
+        log(`❌ Erro ao enviar resumo manual: ${err.message}`, 'ExpressServer');
+        res.status(500).send('❌ Erro ao enviar resumo.');
+    }
+});
+
+router.post('/run/resumo-mensal', async (req, res) => {
+    const { contato, grupo } = req.body;
+
+    if (!contato?.nome || !contato?.telefone || !grupo?.id || !grupo?.nome) {
+        return res.status(400).send('❌ Parâmetros obrigatórios: contato {nome, telefone}, grupo {id, nome}');
+    }
+
+    try {
+        await enviarResumoMensal(contato, grupo);
+        res.send(`✅ Resumo enviado para ${contato.nome} / Grupo ${grupo.nome}`);
+    } catch (err) {
+        log(`❌ Erro ao enviar resumo manual: ${err.message}`, 'ExpressServer');
+        res.status(500).send('❌ Erro ao enviar resumo.');
+    }
+});
+// === Jobs Dinâmicos ===
 router.post('/reload-cron', async (req, res) => {
     try {
         await agendarJobsDinamicos();
@@ -191,7 +203,6 @@ router.post('/reload-cron', async (req, res) => {
         res.status(500).send('Erro ao recarregar jobs.');
     }
 });
-
 // === Logs ===
 router.get('/logs', (req, res) => {
     const logFilePath = path.resolve(__dirname, 'logs/api.log');
@@ -205,7 +216,6 @@ router.get('/logs', (req, res) => {
 router.get('/stdout', (req, res) => {
     res.json(liveLogs);
 });
-
 // === Autenticação ===
 router.post('/auth', (req, res) => {
     const { usuario, senha } = req.body;
@@ -215,15 +225,12 @@ router.post('/auth', (req, res) => {
     res.json({ success: usuario === validUser && senha === validPass });
 });
 
-// === Página HTML ===
 router.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'views/dashboard.html'));
 });
 
-// ✅ aplica o router no prefixo /jobs
 app.use('/jobs', router);
 
-// inicia o servidor
 app.listen(PORT, () => {
     log(`🟢 Servidor iniciado na porta ${PORT}`, 'ExpressServer');
 });

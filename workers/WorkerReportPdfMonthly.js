@@ -5,21 +5,21 @@ const axios = require('axios');
 
 
 async function gerarPdfFaturamento(group_id) {
-    const result = await callPHP('gerarPdfSemanalFaturamento', { group_id });
+    const result = await callPHP('gerarPdfFaturamento', { group_id , periodo:'mensal' });
     return result.success ? result.url : null;
 }
 
 async function gerarPdfCompras(group_id) {
-    const result = await callPHP('gerarPdfSemanalCompras', { group_id });
+    const result = await callPHP('gerarPdfCompras', { group_id, periodo:'mensal' });
     return result.success ? result.url : null;
 }
 
-async function enviarResumoSemanal(contato, grupo) {
+async function enviarResumoMensal(contato, grupo) {
     const { nome, telefone } = contato;
     const grupoId = grupo.id;
     const grupoNome = grupo.nome;
 
-    const intervalos = await callPHP('getIntervalosSemanais', {});
+    const intervalos = await callPHP('getIntervalosMensais', {});
     const { dt_inicio, dt_fim, dt_inicio_anterior, dt_fim_anterior } = intervalos;
 
     const dataInicioStr = dt_inicio.split(' ')[0].split('-').reverse().join('/');
@@ -78,7 +78,7 @@ async function enviarResumoSemanal(contato, grupo) {
 
     const corpoMensagem = `
 🌅 Boa tarde, *${nome}*!
-Segue resumo semanal do *${grupoNome}*, referente a ${dataInicioStr} a ${dataFimStr}:
+Segue resumo mensal do *${grupoNome}*, referente a ${dataInicioStr} a ${dataFimStr}:
 
 📊 Consolidado Faturamento
 💰 Bruto: ${formatCurrency(rAtual.faturamento_bruto)} [Vs ${formatCurrency(rAnt.faturamento_bruto)}]
@@ -112,8 +112,8 @@ O PDF com os detalhes será enviado a seguir.
     await sendWhatsappText(telefone, corpoMensagem.trim());
 
     const [urlFat, urlCmp] = await Promise.all([
-        gerarPdfFaturamento(grupoId),
-        gerarPdfCompras(grupoId)
+        gerarPdfFaturamento(grupoId, 'mensal'),
+        gerarPdfCompras(grupoId, 'mensal')
     ]);
 
     if (urlFat) await sendWhatsappPdf(telefone, urlFat);
@@ -122,8 +122,8 @@ O PDF com os detalhes será enviado a seguir.
     return true;
 }
 
-async function WorkerReportPdfWeekly() {
-    const contatosResp = await callPHP('getContatosByDisparo', { id_disparo: 15 });
+async function WorkerReportPdfMonthly() {
+    const contatosResp = await callPHP('getContatosByDisparo', { id_disparo: 14 });
 
     if (!contatosResp.success) {
         log('❌ Erro ao buscar contatos', 'WorkerReportPdfWeekly');
@@ -132,16 +132,16 @@ async function WorkerReportPdfWeekly() {
 
     for (const contato of contatosResp.data) {
         for (const grupo of contato.grupos) {
-            await enviarResumoSemanal(contato, grupo);
+            await enviarResumoMensal(contato, grupo);
         }
     }
 }
 
 module.exports = {
-    WorkerReportPdfWeekly,
-    enviarResumoSemanal
+    WorkerReportPdfMonthly,
+    enviarResumoMensal
 };
 
 if (require.main === module) {
-    WorkerReportPdfWeekly();
+    WorkerReportPdfMonthly();
 }
