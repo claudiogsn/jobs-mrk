@@ -80,8 +80,11 @@ async function ProcessJobStockZig(group_id, data) {
 }
 
 async function ExecuteJobStockZig(dt_inicio, dt_fim) {
-    const hoje = DateTime.now().toISODate();
-    const ontem = DateTime.now().minus({ days: 1 }).toISODate();
+    // const hoje = DateTime.now().toISODate();
+    // const ontem = DateTime.now().minus({ days: 1 }).toISODate();
+
+    const hoje = '2025-08-13';
+    const ontem = '2025-08-15';
 
     if (!dt_inicio || !dt_fim) {
         dt_inicio = ontem;
@@ -104,7 +107,7 @@ async function ExecuteJobStockZig(dt_inicio, dt_fim) {
 
         for (let cursor = start; cursor <= end; cursor = cursor.plus({ days: 1 })) {
             const data = cursor.toFormat('yyyy-MM-dd');
-            await ProcessJobStockZig(group_id, data);
+            await ProcessJobStockZig(5, data);
         }
 
         log(`✅ Grupo ${group_id} finalizado às ${DateTime.local().toFormat('HH:mm:ss')}`, 'workerStockZig');
