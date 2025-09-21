@@ -100,7 +100,8 @@ async function ExecuteJobStockZig(dt_inicio, dt_fim) {
 
     for (const grupo of grupos) {
         const group_id = grupo.id;
-        log(`🚀 Processando grupo ${grupo.nome} (ID: ${group_id})`, 'workerStockZig');
+        log(`Start: ${start.toISODate()} - End: ${end.toISODate()}`);
+        log(`⏱️ Início do processamento às ${DateTime.local().toFormat('HH:mm:ss')}`, 'workerStockZig');
 
         for (let cursor = start; cursor <= end; cursor = cursor.plus({ days: 1 })) {
             const data = cursor.toFormat('yyyy-MM-dd');
