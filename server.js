@@ -10,7 +10,7 @@ const { processMovimentoCaixa } = require('./workers/workerMovimentoCaixa');
 const { processDocSaida } = require('./workers/workerCreateDocSaida');
 const { dispatchFinanceiro } = require('./workers/workerFinanceiro');
 const { processJobCaixaZig } = require('./workers/workerBillingZig');
-const { ProcessJobStockZig } = require('./workers/workerStockZig');
+const { ProcessJobStockZig, ExecuteJobStockZig} = require('./workers/workerStockZig');
 
 const { agendarJobsDinamicos } = require('./cron/agendador');
 
@@ -104,6 +104,23 @@ router.post('/run/stockzig', async (req, res) => {
 
     try {
         await ProcessJobStockZig(group_id, dt_inicio, dt_fim);
+
+        res.send(`✅ Estoque Zig executado com sucesso para o grupo ${group_id} de ${formatDate(dt_inicio)} até ${formatDate(dt_fim)}`);
+    } catch (err) {
+        log(`❌ Erro ao executar processJobCaixaZig: ${err.message}`, 'ExpressServer');
+        res.status(500).send('❌ Erro ao executar o faturamento Zig.');
+    }
+});
+
+router.post('/run/grupoStockzig', async (req, res) => {
+    const { group_id, dt_inicio, dt_fim } = req.body;
+
+    if (!group_id || !dt_inicio || !dt_fim) {
+        return res.status(400).send('❌ Parâmetros obrigatórios: group_id, dt_inicio, dt_fim');
+    }
+
+    try {
+        await ExecuteJobStockZig(group_id, dt_inicio, dt_fim);
 
         res.send(`✅ Estoque Zig executado com sucesso para o grupo ${group_id} de ${formatDate(dt_inicio)} até ${formatDate(dt_fim)}`);
     } catch (err) {
