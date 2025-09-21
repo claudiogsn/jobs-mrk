@@ -6,6 +6,7 @@ const { DateTime } = require('luxon');
 async function processDocSaida({ group_id, data } = {}) {
   const groupId = parseInt(group_id ?? process.env.GROUP_ID);
   const dataRef = data ?? DateTime.now().minus({ days: 1 }).toISODate();
+  console.log(`Processando grupo ${groupId} para a data ${dataRef}`);
 
   const unidades = await callPHP('getUnitsByGroup', { group_id: groupId });
 
@@ -16,6 +17,7 @@ async function processDocSaida({ group_id, data } = {}) {
 
   for (const unidade of unidades) {
     const system_unit_id = unidade.system_unit_id;
+    log(`🔄 Iniciando importação de movimentação para unidade ${system_unit_id} na data ${dataRef}`, 'workerCreateDocSaida');
 
     try {
       const inicio = Date.now();
@@ -55,9 +57,8 @@ async function ExecuteJobDocSaida(dt_inicio, dt_fim, group_id) {
     dt_fim    = dt_fim    || hoje;
   }
 
-  let start = DateTime.fromISO(dt_inicio);
-  let end   = DateTime.fromISO(dt_fim);
-  if (end < start) [start, end] = [end, start]; // normaliza intervalo invertido
+  const start = DateTime.fromISO(dt_inicio);
+  const end = DateTime.fromISO(dt_fim);
 
   // Resolve grupos
   const grupos = group_id
@@ -77,7 +78,7 @@ async function ExecuteJobDocSaida(dt_inicio, dt_fim, group_id) {
 
     for (let cursor = start; cursor <= end; cursor = cursor.plus({ days: 1 })) {
       const data = cursor.toFormat('yyyy-MM-dd');
-      await processDocSaida({ group_id: gid, day: data });
+      await processDocSaida({ gid,data });
       log(`✅ Dia ${data} processado para o grupo ${gid}`, 'workerCreateDocSaida');
     }
 
