@@ -44,74 +44,45 @@ async function processDocSaida({ group_id, data } = {}) {
   }
 }
 
-async function ExecuteJobDocSaida(dt_inicio, dt_fim, grupo) {
-  const TZ = 'America/Fortaleza';
-  const now = DateTime.now().setZone(TZ);
+// Luxon DateTime
+async function ExecuteJobDocSaida(dt_inicio, dt_fim, group_id) {
+  // Defaults: ontem -> hoje
+  const hoje  = DateTime.now().toISODate();
+  const ontem = DateTime.now().minus({ days: 1 }).toISODate();
 
-  // Defaults (ontem → hoje)
-  const hojeISO  = now.toISODate();
-  const ontemISO = now.minus({ days: 1 }).toISODate();
-
-  const startISO = dt_inicio || ontemISO;
-  const endISO   = dt_fim    || hojeISO;
-
-  let start = DateTime.fromISO(startISO, { zone: TZ });
-  let end   = DateTime.fromISO(endISO,   { zone: TZ });
-
-  if (!start.isValid || !end.isValid) {
-    log(`❌ Datas inválidas: dt_inicio='${dt_inicio}', dt_fim='${dt_fim}'`, 'workerCreateDocSaida');
-    return;
+  if (!dt_inicio || !dt_fim) {
+    dt_inicio = dt_inicio || ontem;
+    dt_fim    = dt_fim    || hoje;
   }
-  if (end < start) [start, end] = [end, start]; // garante início <= fim
 
-  log(
-      `⏱️ Iniciando processDocSaida do período ${start.toISODate()} → ${end.toISODate()} às ${now.toFormat('HH:mm:ss')}`,
-      'workerCreateDocSaida'
-  );
+  let start = DateTime.fromISO(dt_inicio);
+  let end   = DateTime.fromISO(dt_fim);
+  if (end < start) [start, end] = [end, start]; // normaliza intervalo invertido
 
+  // Resolve grupos
+  const grupos = group_id
+      ? [{ id: Number(group_id) }]
+      : await callPHP('getGroupsToProcess', {});
 
-  let grupos = [];
-
-  if (grupo !== undefined && grupo !== null) {
-    const ids = Array.isArray(grupo) ? grupo : [grupo];
-    grupos = ids.map((id) => ({ id: Number(id), nome: `Grupo ${id}` }));
-  } else {
-    const fetched = await callPHP('getGroupsToProcess', {});
-    if (!Array.isArray(fetched) || fetched.length === 0) {
-      log('⚠️ Nenhum grupo encontrado para processar.', 'workerCreateDocSaida');
-      return;
-    }
-    grupos = fetched;
+  if (!Array.isArray(grupos) || grupos.length === 0) {
+    log('⚠️ Nenhum grupo encontrado para processar.', 'workerCreateDocSaida');
+    return;
   }
 
   for (const g of grupos) {
-    const group_id  = Number(g?.id ?? g);
-    const nomeGrupo = g?.nome || g?.nomeGrupo || `Grupo ${group_id}`;
+    const gid = g.id ?? g; // tolera {id} ou número puro
 
-    log(`🚀 Processando grupo: ${nomeGrupo} (ID: ${group_id})`, 'workerCreateDocSaida');
-    log(`Período: ${start.toISODate()} → ${end.toISODate()}`, 'workerCreateDocSaida');
-    log(`⏱️ Início do processamento às ${DateTime.now().setZone(TZ).toFormat('HH:mm:ss')}`, 'workerCreateDocSaida');
+    log(`Start: ${start.toISODate()} - End: ${end.toISODate()}`);
+    log(`⏱️ Início do processamento às ${DateTime.local().toFormat('HH:mm:ss')}`, 'workerCreateDocSaida');
 
     for (let cursor = start; cursor <= end; cursor = cursor.plus({ days: 1 })) {
-
-      const day = cursor;
-      const dayStr = cursor.toFormat('yyyy-MM-dd');
-
-      try {
-        await processDocSaida({ group_id, day });
-        log(`✅ Dia ${dayStr} processado para o grupo ${group_id}`, 'workerCreateDocSaida');
-      } catch (err) {
-        log(`❌ Falha ao processar ${dayStr} para o grupo ${group_id}: ${err?.message || err}`, 'workerCreateDocSaida');
-      }
+      const data = cursor.toFormat('yyyy-MM-dd');
+      await processDocSaida({ group_id: gid, day: data });
+      log(`✅ Dia ${data} processado para o grupo ${gid}`, 'workerCreateDocSaida');
     }
 
-    log(`✅ Grupo ${group_id} finalizado às ${DateTime.now().setZone(TZ).toFormat('HH:mm:ss')}`, 'workerCreateDocSaida');
+    log(`✅ Grupo ${gid} finalizado às ${DateTime.local().toFormat('HH:mm:ss')}`, 'workerCreateDocSaida');
   }
-
-  log(
-      `⏱️ Finalizando processDocSaida do período ${start.toISODate()} → ${end.toISODate()} às ${DateTime.now().setZone(TZ).toFormat('HH:mm:ss')}`,
-      'workerCreateDocSaida'
-  );
 }
 
 
