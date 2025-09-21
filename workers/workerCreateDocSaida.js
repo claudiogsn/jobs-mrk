@@ -80,7 +80,7 @@ async function ExecuteJobDocSaida(dt_inicio, dt_fim, group_id) {
 
     for (let cursor = start; cursor <= end; cursor = cursor.plus({ days: 1 })) {
       const data = cursor.toFormat('yyyy-MM-dd');
-      await processDocSaida({ group_id: gid, day: data });
+      await processDocSaida({ group_id: gid, data });
       log(`✅ Dia ${data} processado para o grupo ${gid}`, 'workerCreateDocSaida');
     }
 
