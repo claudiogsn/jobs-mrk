@@ -120,7 +120,7 @@ router.post('/run/grupoStockzig', async (req, res) => {
     }
 
     try {
-        await ExecuteJobStockZig(group_id, dt_inicio, dt_fim);
+        await ExecuteJobStockZig(dt_inicio, dt_fim);
 
         res.send(`✅ Estoque Zig executado com sucesso para o grupo ${group_id} de ${formatDate(dt_inicio)} até ${formatDate(dt_fim)}`);
     } catch (err) {

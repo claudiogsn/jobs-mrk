@@ -80,13 +80,13 @@ async function ProcessJobStockZig(group_id, data) {
 }
 
 async function ExecuteJobStockZig(dt_inicio, dt_fim) {
-    // const hoje = DateTime.now().toISODate();
-    // const ontem = DateTime.now().minus({ days: 1 }).toISODate();
-    //
-    // if (!dt_inicio || !dt_fim) {
-    //     dt_inicio = ontem;
-    //     dt_fim = hoje;
-    // }
+    const hoje = DateTime.now().toISODate();
+    const ontem = DateTime.now().minus({ days: 1 }).toISODate();
+
+    if (!dt_inicio || !dt_fim) {
+        dt_inicio = ontem;
+        dt_fim = hoje;
+    }
 
     const start = DateTime.fromISO(dt_inicio);
     const end = DateTime.fromISO(dt_fim);
