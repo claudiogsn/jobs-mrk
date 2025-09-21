@@ -105,6 +105,7 @@ async function ExecuteJobStockZig(dt_inicio, dt_fim) {
         for (let cursor = start; cursor <= end; cursor = cursor.plus({ days: 1 })) {
             const data = cursor.toFormat('yyyy-MM-dd');
             await ProcessJobStockZig(5, data);
+            log(`✅ Dia ${data} processado para o grupo ${group_id}`, 'workerStockZig');
         }
 
         log(`✅ Grupo ${group_id} finalizado às ${DateTime.local().toFormat('HH:mm:ss')}`, 'workerStockZig');
