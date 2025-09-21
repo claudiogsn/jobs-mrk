@@ -80,11 +80,8 @@ async function ProcessJobStockZig(group_id, data) {
 }
 
 async function ExecuteJobStockZig(dt_inicio, dt_fim) {
-    // const hoje = DateTime.now().toISODate();
-    // const ontem = DateTime.now().minus({ days: 1 }).toISODate();
-
-    const hoje = '2025-08-13';
-    const ontem = '2025-08-15';
+    const hoje = DateTime.now().toISODate();
+    const ontem = DateTime.now().minus({ days: 1 }).toISODate();
 
     if (!dt_inicio || !dt_fim) {
         dt_inicio = ontem;
