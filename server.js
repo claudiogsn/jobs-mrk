@@ -7,7 +7,7 @@ const { getLogs,log} = require('./utils/logger');
 const { processItemVenda } = require('./workers/workerItemVenda');
 const { processConsolidation } = require('./workers/workerConsolidateSales');
 const { processMovimentoCaixa } = require('./workers/workerMovimentoCaixa');
-const { processDocSaida } = require('./workers/workerCreateDocSaida');
+const { processDocSaida, ExecuteJobDocSaida } = require('./workers/workerCreateDocSaida');
 const { dispatchFinanceiro } = require('./workers/workerFinanceiro');
 const { processJobCaixaZig } = require('./workers/workerBillingZig');
 const { ProcessJobStockZig, ExecuteJobStockZig} = require('./workers/workerStockZig');
@@ -121,6 +121,23 @@ router.post('/run/grupoStockzig', async (req, res) => {
 
     try {
         await ExecuteJobStockZig(dt_inicio, dt_fim);
+
+        res.send(`✅ Estoque Zig executado com sucesso para o grupo ${group_id} de ${formatDate(dt_inicio)} até ${formatDate(dt_fim)}`);
+    } catch (err) {
+        log(`❌ Erro ao executar processJobCaixaZig: ${err.message}`, 'ExpressServer');
+        res.status(500).send('❌ Erro ao executar o faturamento Zig.');
+    }
+});
+
+router.post('/run/grupoDocSaidaEstoque', async (req, res) => {
+    const { group_id, dt_inicio, dt_fim } = req.body;
+
+    if (!group_id || !dt_inicio || !dt_fim) {
+        return res.status(400).send('❌ Parâmetros obrigatórios: group_id, dt_inicio, dt_fim');
+    }
+
+    try {
+        await ExecuteJobDocSaida(group_id, dt_inicio, dt_fim);
 
         res.send(`✅ Estoque Zig executado com sucesso para o grupo ${group_id} de ${formatDate(dt_inicio)} até ${formatDate(dt_fim)}`);
     } catch (err) {

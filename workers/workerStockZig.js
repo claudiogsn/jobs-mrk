@@ -91,15 +91,15 @@ async function ExecuteJobStockZig(dt_inicio, dt_fim) {
     const start = DateTime.fromISO(dt_inicio);
     const end = DateTime.fromISO(dt_fim);
 
-    //const grupos = await callPHP('getGroupsToProcess', {});
+    const grupos = await callPHP('getGroupsToProcess', {});
 
-    // if (!Array.isArray(grupos) || grupos.length === 0) {
-    //     log('⚠️ Nenhum grupo encontrado para processar.', 'workerStockZig');
-    //     return;
-    // }
+    if (!Array.isArray(grupos) || grupos.length === 0) {
+        log('⚠️ Nenhum grupo encontrado para processar.', 'workerStockZig');
+        return;
+    }
 
-    // for (const grupo of grupos) {
-        const group_id = 5;
+    for (const grupo of grupos) {
+        const group_id = grupo.id;
         log(`Start: ${start.toISODate()} - End: ${end.toISODate()}`);
         log(`⏱️ Início do processamento às ${DateTime.local().toFormat('HH:mm:ss')}`, 'workerStockZig');
 
@@ -110,7 +110,7 @@ async function ExecuteJobStockZig(dt_inicio, dt_fim) {
         }
 
         log(`✅ Grupo ${group_id} finalizado às ${DateTime.local().toFormat('HH:mm:ss')}`, 'workerStockZig');
-    // }
+    }
 }
 
 module.exports = { ExecuteJobStockZig, ProcessJobStockZig };

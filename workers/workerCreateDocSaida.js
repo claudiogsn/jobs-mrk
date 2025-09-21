@@ -44,30 +44,76 @@ async function processDocSaida({ group_id, data } = {}) {
   }
 }
 
-async function ExecuteJobDocSaida() {
-  const hoje = DateTime.local();
-  const day = hoje.minus({ days: 1 });
+async function ExecuteJobDocSaida(dt_inicio, dt_fim, grupo) {
+  const TZ = 'America/Fortaleza';
+  const now = DateTime.now().setZone(TZ);
 
-  log(`⏱️ Iniciando processDocSaida de ${day} às ${hoje.toFormat('HH:mm:ss')}`, 'workerCreateDocSaida');
+  // Defaults (ontem → hoje)
+  const hojeISO  = now.toISODate();
+  const ontemISO = now.minus({ days: 1 }).toISODate();
 
+  const startISO = dt_inicio || ontemISO;
+  const endISO   = dt_fim    || hojeISO;
 
-  const grupos = await callPHP('getGroupsToProcess', {});
+  let start = DateTime.fromISO(startISO, { zone: TZ });
+  let end   = DateTime.fromISO(endISO,   { zone: TZ });
 
-  if (!Array.isArray(grupos) || grupos.length === 0) {
-    log('⚠️ Nenhum grupo encontrado para processar.', 'workerCreateDocSaida');
+  if (!start.isValid || !end.isValid) {
+    log(`❌ Datas inválidas: dt_inicio='${dt_inicio}', dt_fim='${dt_fim}'`, 'workerCreateDocSaida');
     return;
   }
+  if (end < start) [start, end] = [end, start]; // garante início <= fim
 
-  for (const grupo of grupos) {
-    const group_id = grupo.id;
-    const nomeGrupo = grupo.nome;
+  log(
+      `⏱️ Iniciando processDocSaida do período ${start.toISODate()} → ${end.toISODate()} às ${now.toFormat('HH:mm:ss')}`,
+      'workerCreateDocSaida'
+  );
+
+
+  let grupos = [];
+
+  if (grupo !== undefined && grupo !== null) {
+    const ids = Array.isArray(grupo) ? grupo : [grupo];
+    grupos = ids.map((id) => ({ id: Number(id), nome: `Grupo ${id}` }));
+  } else {
+    const fetched = await callPHP('getGroupsToProcess', {});
+    if (!Array.isArray(fetched) || fetched.length === 0) {
+      log('⚠️ Nenhum grupo encontrado para processar.', 'workerCreateDocSaida');
+      return;
+    }
+    grupos = fetched;
+  }
+
+  for (const g of grupos) {
+    const group_id  = Number(g?.id ?? g);
+    const nomeGrupo = g?.nome || g?.nomeGrupo || `Grupo ${group_id}`;
+
     log(`🚀 Processando grupo: ${nomeGrupo} (ID: ${group_id})`, 'workerCreateDocSaida');
-    await processDocSaida({ group_id, day });
+    log(`Período: ${start.toISODate()} → ${end.toISODate()}`, 'workerCreateDocSaida');
+    log(`⏱️ Início do processamento às ${DateTime.now().setZone(TZ).toFormat('HH:mm:ss')}`, 'workerCreateDocSaida');
+
+    for (let cursor = start; cursor <= end; cursor = cursor.plus({ days: 1 })) {
+
+      const day = cursor;
+      const dayStr = cursor.toFormat('yyyy-MM-dd');
+
+      try {
+        await processDocSaida({ group_id, day });
+        log(`✅ Dia ${dayStr} processado para o grupo ${group_id}`, 'workerCreateDocSaida');
+      } catch (err) {
+        log(`❌ Falha ao processar ${dayStr} para o grupo ${group_id}: ${err?.message || err}`, 'workerCreateDocSaida');
+      }
     }
 
+    log(`✅ Grupo ${group_id} finalizado às ${DateTime.now().setZone(TZ).toFormat('HH:mm:ss')}`, 'workerCreateDocSaida');
+  }
 
-    log(`⏱️ Finalizando processDocSaida de ${day} às ${hoje.toFormat('HH:mm:ss')}`, 'workerCreateDocSaida');
+  log(
+      `⏱️ Finalizando processDocSaida do período ${start.toISODate()} → ${end.toISODate()} às ${DateTime.now().setZone(TZ).toFormat('HH:mm:ss')}`,
+      'workerCreateDocSaida'
+  );
 }
+
 
 module.exports = { processDocSaida, ExecuteJobDocSaida };
 
