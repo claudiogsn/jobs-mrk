@@ -18,6 +18,9 @@ const { enviarResumoDiario, WorkerResumoDiario } = require('./workers/WorkerDisp
 const { enviarResumoSemanal, WorkerReportPdfWeekly } = require('./workers/WorkerReportPdfWeekly');
 const { enviarResumoMensal, WorkerReportPdfMonthly } = require('./workers/WorkerReportPdfMonthly');
 
+const { runSalesPipeline } = require('./workers/workerSalesPipeline');
+
+
 
 const app = express();
 const router = express.Router();
@@ -243,6 +246,36 @@ router.post('/run/resumo-mensal', async (req, res) => {
     } catch (err) {
         log(`❌ Erro ao enviar resumo manual: ${err.message}`, 'ExpressServer');
         res.status(500).send('❌ Erro ao enviar resumo.');
+    }
+});
+function isValidYMD(s) {
+    return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+}
+
+router.post('/run/pipeline', async (req, res) => {
+    const { group_id, dt_inicio, dt_fim } = req.body || {};
+
+    if (!group_id || !dt_inicio || !dt_fim) {
+        return res
+            .status(400)
+            .send('❌ Parâmetros obrigatórios ausentes: group_id, dt_inicio, dt_fim');
+    }
+    if (!isValidYMD(dt_inicio) || !isValidYMD(dt_fim)) {
+        return res.status(400).send('❌ Formato de data inválido. Use YYYY-MM-DD.');
+    }
+
+    try {
+        const result = await runSalesPipeline({ group_id, dt_inicio, dt_fim });
+        const fmt = (d) => d.split('-').reverse().join('/');
+
+        res.send(
+            `✅ Pipeline executado com sucesso:<br>` +
+            `<b>Grupo:</b> ${group_id}<br>` +
+            `<b>Período:</b> ${fmt(dt_inicio)} até ${fmt(dt_fim)}`
+        );
+    } catch (err) {
+        log(`❌ Erro no pipeline: ${err.message}`, 'ExpressServer');
+        res.status(500).send('❌ Erro ao executar o pipeline.');
     }
 });
 // === Jobs Dinâmicos ===
