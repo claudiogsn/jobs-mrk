@@ -60,7 +60,7 @@ async function enviarNotasPendentes(contato, grupo) {
 
         corpoMensagem += `📍 *${unitName}*\n`;
 
-        const limite = 30;
+        const limite = 20;
         notasPendentes.slice(0, limite).forEach((nota) => {
             const dataEmissaoBr = formatDateBr(nota.data_emissao);
             const fornecedor = nota.emitente_razao || 'Fornecedor não informado';
