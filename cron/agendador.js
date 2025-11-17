@@ -12,6 +12,7 @@ const jobMap = {
     WorkerResumoDiario: require('../workers/WorkerDisparoFaturamento').WorkerResumoDiario,
     WorkerReportPdfWeekly: require('../workers/WorkerReportPdfWeekly').WorkerReportPdfWeekly,
     WorkerReportPdfMonthly: require('../workers/WorkerReportPdfMonthly').WorkerReportPdfMonthly,
+    WorkerNotasPendentes: require('../workers/WorkerNotasPendentes').WorkerNotasPendentes,
 
     // 🔧 Job de teste
     jobTesteLog: async () => {
