@@ -39,7 +39,7 @@ async function enviarNotasPendentes(contato, grupo) {
 
     for (const unidade of unidades) {
         // aqui assumo que getUnitsByGroup retorna "id" (system_unit_id) e "name"
-        const systemUnitId = unidade.id;
+        const systemUnitId = unidade.system_unit_id;
         const unitName = unidade.name || unidade.nome || unidade.descricao || `Unidade ${systemUnitId}`;
 
         const resp = await callPHP('listarNotasNaoImportadasUltimos30Dias', {
@@ -53,7 +53,6 @@ async function enviarNotasPendentes(contato, grupo) {
 
         const notasPendentes = resp.data?.notas_pendentes || [];
         if (!Array.isArray(notasPendentes) || notasPendentes.length === 0) {
-            // nada pendente nessa unidade
             continue;
         }
 
@@ -61,16 +60,12 @@ async function enviarNotasPendentes(contato, grupo) {
 
         corpoMensagem += `📍 *${unitName}*\n`;
 
-        // Limita a, por exemplo, 10 linhas para não estourar a mensagem
         const limite = 10;
         notasPendentes.slice(0, limite).forEach((nota) => {
             const dataEmissaoBr = formatDateBr(nota.data_emissao);
             const fornecedor = nota.emitente_razao || 'Fornecedor não informado';
             const valor = formatCurrency(nota.valor_total || 0);
-            const chave = nota.chave_acesso || '';
-
             corpoMensagem += `• ${dataEmissaoBr} - ${fornecedor} - ${valor}\n`;
-            corpoMensagem += `  Chave: ${chave}\n`;
         });
 
         if (notasPendentes.length > limite) {
@@ -105,8 +100,7 @@ async function enviarNotasPendentes(contato, grupo) {
 }
 
 async function WorkerNotasPendentes() {
-    // aqui você pode usar outro disparo, se quiser separar das mensagens de resumo diário
-    const idDisparo = 2; // AJUSTA ESSE ID CONFORME CADASTRO NO SEU SISTEMA
+    const idDisparo = 17; // AJUSTA ESSE ID CONFORME CADASTRO NO SEU SISTEMA
 
     const contatosResp = await callPHP('getContatosByDisparo', { id_disparo: idDisparo });
     if (!contatosResp || !contatosResp.success) {
