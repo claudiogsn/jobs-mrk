@@ -19,6 +19,8 @@ const { enviarResumoSemanal, WorkerReportPdfWeekly } = require('./workers/Worker
 const { enviarResumoMensal, WorkerReportPdfMonthly } = require('./workers/WorkerReportPdfMonthly');
 
 const { runSalesPipeline } = require('./workers/workerSalesPipeline');
+const { ExecuteJobFluxoEstoque } = require('./workers/workerFluxoEstoque');
+
 
 
 
@@ -248,6 +250,7 @@ router.post('/run/resumo-mensal', async (req, res) => {
         res.status(500).send('❌ Erro ao enviar resumo.');
     }
 });
+
 function isValidYMD(s) {
     return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 }
@@ -278,6 +281,17 @@ router.post('/run/pipeline', async (req, res) => {
         res.status(500).send('❌ Erro ao executar o pipeline.');
     }
 });
+
+router.post('/run/fluxo-estoque', async (req, res) => {
+    const { group_id, unit_id, dt_inicio, dt_fim } = req.body;
+    try {
+        await ExecuteJobFluxoEstoque({ group: group_id, unit: unit_id, inicio: dt_inicio, fim: dt_fim });
+        res.send(`Executado com sucesso`);
+    } catch (err) {
+        res.status(500).send("Erro ao executar fluxo de estoque");
+    }
+});
+
 // === Jobs Dinâmicos ===
 router.post('/reload-cron', async (req, res) => {
     try {
