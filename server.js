@@ -17,6 +17,7 @@ const { agendarJobsDinamicos } = require('./cron/agendador');
 const { enviarResumoDiario, WorkerResumoDiario } = require('./workers/WorkerDisparoFaturamento');
 const { enviarResumoSemanal, WorkerReportPdfWeekly } = require('./workers/WorkerReportPdfWeekly');
 const { enviarResumoMensal, WorkerReportPdfMonthly } = require('./workers/WorkerReportPdfMonthly');
+const {enviarNotasPendentes, WorkerNotasPendentes} = require('./workers/workerNotasPendentes');
 
 const { runSalesPipeline } = require('./workers/workerSalesPipeline');
 const { ExecuteJobFluxoEstoque } = require('./workers/workerFluxoEstoque');
@@ -218,6 +219,23 @@ router.post('/run/resumo-diario', async (req, res) => {
         res.status(500).send('❌ Erro ao enviar resumo.');
     }
 });
+
+router.post('/run/notas-pendentes', async (req, res) => {
+    const { contato, grupo } = req.body;
+
+    if (!contato?.nome || !contato?.telefone || !grupo?.id || !grupo?.nome) {
+        return res.status(400).send('❌ Parâmetros obrigatórios: contato {nome, telefone}, grupo {id, nome}');
+    }
+
+    try {
+        await enviarNotasPendentes(contato, grupo);
+        res.send(`✅ Resumo enviado para ${contato.nome} / Grupo ${grupo.nome}`);
+    } catch (err) {
+        log(`❌ Erro ao enviar notas pendentes: ${err.message}`, 'ExpressServer');
+        res.status(500).send('❌ Erro ao enviar resumo.');
+    }
+});
+
 
 router.post('/run/resumo-semanal', async (req, res) => {
     const { contato, grupo } = req.body;
