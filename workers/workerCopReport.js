@@ -13,11 +13,7 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 // Diretório padrão onde os PDFs serão salvos
 // - Em produção: /var/www/html/reports  (URL: ${PUBLIC_BASE_REPORT_URL}/arquivo.pdf)
 // - Em dev/local: pasta "reports" ao lado deste arquivo
-const DEFAULT_REPORTS_DIR =
-    process.env.COP_REPORTS_DIR ||
-    (IS_PROD
-        ? '/var/www/html/reports'
-        : path.join(__dirname, 'reports'));
+const DEFAULT_REPORTS_DIR = path.join(__dirname, 'reports');
 
 // URL base pública para os relatórios (usar algo tipo https://portal.mrksolucoes.com.br/reports)
 const PUBLIC_BASE_REPORT_URL = process.env.PUBLIC_BASE_REPORT_URL || null;
@@ -391,7 +387,7 @@ async function generateCopPdf({
 function montarMensagemAuditoria(contatoNome, unitName, dataRefISO, itens) {
     const dataRefBr = formatDateBR(dataRefISO);
 
-    // Ordena pelos maiores desvios em quantidade 
+    // Ordena pelos maiores desvios em quantidade
     const ordenados =
         (itens || [])
             .filter((i) => i.divergencia != null && Number(i.divergencia) !== 0)
