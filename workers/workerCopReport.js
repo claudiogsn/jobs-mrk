@@ -393,10 +393,8 @@ function montarMensagemAuditoria(contatoNome, unitName, dataRefISO, itens) {
             .filter((i) => i.divergencia != null && Number(i.divergencia) !== 0)
             .sort((a, b) => Math.abs(Number(b.divergencia || 0)) - Math.abs(Number(a.divergencia || 0)));
 
-    const top5 = ordenados.slice(0, 5);
-
     // Sem divergências relevantes
-    if (top5.length === 0) {
+    if (ordenados.length === 0) {
         return (
             `Olá, ${contatoNome}\n` +
             `Segue auditoria da *${unitName} no dia ${dataRefBr}*.\n\n` +
@@ -409,7 +407,7 @@ function montarMensagemAuditoria(contatoNome, unitName, dataRefISO, itens) {
     msg += `Olá, ${contatoNome}\n`;
     msg += `Segue auditoria da *${unitName} no dia ${dataRefBr}* :\n\n`;
 
-    for (const item of top5) {
+    for (const item of ordenados) {
         const nome = item.nome_produto || 'Insumo sem nome';
         const diffStr = formatDiffQty(item.divergencia);
         if (!diffStr) continue;
