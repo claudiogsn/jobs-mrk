@@ -67,7 +67,8 @@ async function loginMenew() {
 }
 
 async function callPHP(method, data) {
-    const payload = { method, data };
+    const token = process.env.MRK_TOKEN;
+    const payload = { method,token,data };
 
     if (['itemVendaPayload', 'persistSales','persistMovimentoCaixa'].includes(method)) {
         //appendApiLog(`➡️ REQUEST: ${method} - Grande Demais - Payload não logado por segurança`);

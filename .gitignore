@@ -1,3 +1,5 @@
+workers/reports
+
 # Logs
 logs
 *.log

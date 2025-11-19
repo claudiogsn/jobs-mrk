@@ -18,6 +18,8 @@ const { enviarResumoDiario, WorkerResumoDiario } = require('./workers/WorkerDisp
 const { enviarResumoSemanal, WorkerReportPdfWeekly } = require('./workers/WorkerReportPdfWeekly');
 const { enviarResumoMensal, WorkerReportPdfMonthly } = require('./workers/WorkerReportPdfMonthly');
 const {enviarNotasPendentes, WorkerNotasPendentes} = require('./workers/workerNotasPendentes');
+const { enviarAuditoriaCop } = require('./workers/workerCopReport');
+
 
 const { runSalesPipeline } = require('./workers/workerSalesPipeline');
 const { ExecuteJobFluxoEstoque } = require('./workers/workerFluxoEstoque');
@@ -232,6 +234,22 @@ router.post('/run/notas-pendentes', async (req, res) => {
         res.send(`✅ Resumo enviado para ${contato.nome} / Grupo ${grupo.nome}`);
     } catch (err) {
         log(`❌ Erro ao enviar notas pendentes: ${err.message}`, 'ExpressServer');
+        res.status(500).send('❌ Erro ao enviar resumo.');
+    }
+});
+
+router.post('/run/send-cop', async (req, res) => {
+    const { contato, grupo } = req.body;
+
+    if (!contato?.nome || !contato?.telefone || !grupo?.id || !grupo?.nome) {
+        return res.status(400).send('❌ Parâmetros obrigatórios: contato {nome, telefone}, grupo {id, nome}');
+    }
+
+    try {
+        await enviarAuditoriaCop(contato, grupo);
+        res.send(`✅ Resumo enviado para ${contato.nome} / Grupo ${grupo.nome}`);
+    } catch (err) {
+        log(`❌ Erro ao enviar cop: ${err.message}`, 'ExpressServer');
         res.status(500).send('❌ Erro ao enviar resumo.');
     }
 });
