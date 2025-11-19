@@ -33,6 +33,8 @@ const PORT = process.env.PORT || 3005;
 const liveLogs = [];
 const MAX_LOGS = 1000;
 const originalLog = console.log;
+const REPORTS_DIR = path.join(__dirname, 'workers', 'reports');
+
 
 const formatDate = (dataISO) => {
     if (!dataISO) return '';
@@ -51,6 +53,11 @@ router.get('/favicon.ico', (req, res) => {
 router.get('/logo.png', (req, res) => {
     res.sendFile(path.join(__dirname, 'assets/logo.png'));
 });
+
+// 🔹 Servir arquivos da pasta workers/reports
+// URL final: https://portal.mrksolucoes.com.br/jobs/reports/NOME_DO_ARQUIVO.pdf
+router.use('/reports', express.static(REPORTS_DIR));
+
 
 console.log = (...args) => {
     const timestamp = new Date().toLocaleString('pt-BR', {
