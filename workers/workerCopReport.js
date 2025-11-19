@@ -399,7 +399,7 @@ function montarMensagemAuditoria(contatoNome, unitName, dataRefISO, itens) {
     if (top5.length === 0) {
         return (
             `Olá, ${contatoNome}\n` +
-            `Segue auditoria da ${unitName} no dia ${dataRefBr}.\n\n` +
+            `Segue auditoria da *${unitName} no dia ${dataRefBr}*.\n\n` +
             `Nenhuma divergência relevante encontrada.`
         ).trim();
     }
@@ -407,7 +407,7 @@ function montarMensagemAuditoria(contatoNome, unitName, dataRefISO, itens) {
     // Com divergências
     let msg = '';
     msg += `Olá, ${contatoNome}\n`;
-    msg += `Segue auditoria da ${unitName} no dia ${dataRefBr} :\n\n`;
+    msg += `Segue auditoria da *${unitName} no dia ${dataRefBr}* :\n\n`;
 
     for (const item of top5) {
         const nome = item.nome_produto || 'Insumo sem nome';
