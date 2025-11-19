@@ -391,7 +391,7 @@ async function generateCopPdf({
 function montarMensagemAuditoria(contatoNome, unitName, dataRefISO, itens) {
     const dataRefBr = formatDateBR(dataRefISO);
 
-    // Ordena pelos maiores desvios em quantidade (valor absoluto)
+    // Ordena pelos maiores desvios em quantidade 
     const ordenados =
         (itens || [])
             .filter((i) => i.divergencia != null && Number(i.divergencia) !== 0)
