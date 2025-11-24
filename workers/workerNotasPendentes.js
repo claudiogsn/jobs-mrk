@@ -62,10 +62,11 @@ async function enviarNotasPendentes(contato, grupo) {
 
         const limite = 20;
         notasPendentes.slice(0, limite).forEach((nota) => {
+            const numeroNf = nota.numero_nf;
             const dataEmissaoBr = formatDateBr(nota.data_emissao);
             const fornecedor = nota.emitente_razao || 'Fornecedor não informado';
             const valor = formatCurrency(nota.valor_total || 0);
-            corpoMensagem += `• ${dataEmissaoBr} - ${fornecedor} - ${valor}\n`;
+            corpoMensagem += `• ${dataEmissaoBr} - ${numeroNf} - ${fornecedor} - ${valor}\n`;
         });
 
         if (notasPendentes.length > limite) {
@@ -102,7 +103,7 @@ async function enviarNotasPendentes(contato, grupo) {
 async function WorkerNotasPendentes() {
     const idDisparo = 17; // AJUSTA ESSE ID CONFORME CADASTRO NO SEU SISTEMA
 
-    const contatosResp = await callPHP('getContatosByDisparo', { id_disparo: idDisparo });
+    const contatosReqsp = await callPHP('getContatosByDisparo', { id_disparo: idDisparo });
     if (!contatosResp || !contatosResp.success) {
         log(`❌ Erro ao buscar contatos para disparo ${idDisparo}`, 'WorkerNotasPendentes');
         return;
