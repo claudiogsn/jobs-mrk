@@ -42,11 +42,12 @@ async function runSalesPipeline({ group_id, dt_inicio, dt_fim }) {
 
     // 1) Importar Itens Vendidos (intervalo completo)
     log(`➡️ Etapa 1/3: Importar itens vendidos`, 'workerSalesPipeline');
-    await processItemVenda({
-        group_id: gid,
-        dt_inicio: start.toFormat('yyyy-MM-dd'),
-        dt_fim: end.toFormat('yyyy-MM-dd'),
-    });
+    console.log('Passei do 01')
+    // await processItemVenda({
+    //     group_id: gid,
+    //     dt_inicio: start.toFormat('yyyy-MM-dd'),
+    //     dt_fim: end.toFormat('yyyy-MM-dd'),
+    // });
 
     // 2) Consolidar vendas por grupo (assinatura POSICIONAL)
     log(`➡️ Etapa 2/3: Consolidar vendas`, 'workerSalesPipeline');
