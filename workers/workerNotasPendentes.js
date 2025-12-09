@@ -101,11 +101,17 @@ async function enviarNotasPendentes(contato, grupo) {
 }
 
 async function WorkerNotasPendentes() {
-    const idDisparo = 17; // AJUSTA ESSE ID CONFORME CADASTRO NO SEU SISTEMA
+    const idDisparo = 17;
 
-    const contatosReqsp = await callPHP('getContatosByDisparo', { id_disparo: idDisparo });
+    const contatosResp = await callPHP('getContatosByDisparo', { id_disparo: idDisparo });
+
     if (!contatosResp || !contatosResp.success) {
-        log(`❌ Erro ao buscar contatos para disparo ${idDisparo}`, 'WorkerNotasPendentes');
+        log(`❌ Erro ao buscar contatos para disparo ${idDisparo}: ${contatosResp?.message || 'sem mensagem'}`, 'WorkerNotasPendentes');
+        return;
+    }
+
+    if (!Array.isArray(contatosResp.data) || contatosResp.data.length === 0) {
+        log(`ℹ️ Nenhum contato retornado para disparo ${idDisparo}`, 'WorkerNotasPendentes');
         return;
     }
 
@@ -119,6 +125,7 @@ async function WorkerNotasPendentes() {
         }
     }
 }
+
 
 module.exports = {
     enviarNotasPendentes,
