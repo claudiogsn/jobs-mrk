@@ -11,7 +11,7 @@ const { processDocSaida, ExecuteJobDocSaida } = require('./workers/workerCreateD
 const { dispatchFinanceiro } = require('./workers/workerFinanceiro');
 const { processJobCaixaZig } = require('./workers/workerBillingZig');
 const { ProcessJobStockZig, ExecuteJobStockZig} = require('./workers/workerStockZig');
-const { processConsolidationStock } = require('./workers/workerConsolidationStock');
+const { processConsolidationStock } = require('./workers/WorkerConsolidationStock');
 
 const { agendarJobsDinamicos } = require('./cron/agendador');
 
