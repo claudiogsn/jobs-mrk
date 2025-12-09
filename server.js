@@ -11,6 +11,7 @@ const { processDocSaida, ExecuteJobDocSaida } = require('./workers/workerCreateD
 const { dispatchFinanceiro } = require('./workers/workerFinanceiro');
 const { processJobCaixaZig } = require('./workers/workerBillingZig');
 const { ProcessJobStockZig, ExecuteJobStockZig} = require('./workers/workerStockZig');
+const { processConsolidationStock } = require('./workers/workerConsolidationStock');
 
 const { agendarJobsDinamicos } = require('./cron/agendador');
 
@@ -21,8 +22,10 @@ const {enviarNotasPendentes, WorkerNotasPendentes} = require('./workers/workerNo
 const { enviarAuditoriaCop } = require('./workers/workerCopReport');
 
 
+
 const { runSalesPipeline } = require('./workers/workerSalesPipeline');
 const { ExecuteJobFluxoEstoque } = require('./workers/workerFluxoEstoque');
+const {DateTime} = require("luxon");
 
 
 
@@ -171,6 +174,54 @@ router.post('/run/consolidate', async (req, res) => {
     await processConsolidation(group_id, dt_inicio, dt_fim);
     res.send(`✅ Worker - <strong>Sumarização das Vendas</strong> executada com sucesso:<br><b>Grupo:</b> ${group_id}<br><b>Data:</b> ${formatDate(dt_inicio)} até ${formatDate(dt_fim)}`);
 });
+
+router.post('/run/consolidacao-estoque', async (req, res) => {
+    const { group_id, dt_inicio, dt_fim } = req.body;
+
+    if (!group_id || !dt_inicio || !dt_fim) {
+        return res
+            .status(400)
+            .send('❌ Parâmetros obrigatórios ausentes: group_id, dt_inicio, dt_fim');
+    }
+
+    try {
+        const inicio = DateTime.fromISO(dt_inicio);
+        const fim = DateTime.fromISO(dt_fim);
+
+        if (!inicio.isValid || !fim.isValid) {
+            return res.status(400).send('❌ Datas inválidas. Use formato YYYY-MM-DD.');
+        }
+
+        if (fim < inicio) {
+            return res.status(400).send('❌ dt_fim não pode ser menor que dt_inicio.');
+        }
+
+        // diferença em dias, intervalo INCLUSIVO
+        const diffDays = Math.floor(fim.diff(inicio, 'days').days) + 1;
+
+        if (diffDays > 5) {
+            return res
+                .status(400)
+                .send('❌ Período máximo permitido é de 5 dias (intervalo inclusivo).');
+        }
+
+        for (let i = 0; i < diffDays; i++) {
+            const data_ref = inicio.plus({ days: i }).toFormat('yyyy-MM-dd');
+            await processConsolidationStock({ group_id, data_ref });
+        }
+
+        return res.send(
+            `✅ Consolidação de estoque executada para o grupo ${group_id} de ${dt_inicio} até ${dt_fim}`
+        );
+    } catch (err) {
+        console.error(err);
+        return res
+            .status(500)
+            .send(`❌ Erro ao executar consolidação de estoque: ${err.message}`);
+    }
+});
+
+
 
 router.post('/run/docsaida', async (req, res) => {
     const { group_id, data } = req.body;

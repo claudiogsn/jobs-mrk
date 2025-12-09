@@ -23,10 +23,13 @@ function getDataRange() {
     return { dtInicio: fmt(inicio), dtFim: fmt(fim) };
 }
 
-async function ExecuteJobFluxoEstoque({ group = null, unit = null, inicio = null, fim = null }) {
-    const { dtInicio, dtFim } = inicio && fim ? { dtInicio: inicio, dtFim: fim } : getDataRange();
+async function ExecuteJobFluxoEstoque({ group = null, unit = null, inicio = null, fim = null } = {}) {
+    const { dtInicio, dtFim } = inicio && fim
+        ? { dtInicio: inicio, dtFim: fim }
+        : getDataRange();
 
     log(`▶️ Iniciando Fluxo de Estoque | Grupo: ${group ?? '-'} | Unidade: ${unit ?? '-'} | Período: ${dtInicio} -> ${dtFim}`, "workerFluxoEstoque");
+
 
     const conn = await mysql.createConnection({
         host: process.env.DB_HOST,

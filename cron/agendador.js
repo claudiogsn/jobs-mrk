@@ -13,6 +13,7 @@ const jobMap = {
     WorkerReportPdfWeekly: require('../workers/WorkerReportPdfWeekly').WorkerReportPdfWeekly,
     WorkerReportPdfMonthly: require('../workers/WorkerReportPdfMonthly').WorkerReportPdfMonthly,
     WorkerNotasPendentes: require('../workers/workerNotasPendentes').WorkerNotasPendentes,
+    WorkerConsolidationStock: require('../workers/WorkerConsolidationStock').WorkerConsolidationStock,
 
     // 🔧 Job de teste
     jobTesteLog: async () => {
