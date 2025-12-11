@@ -189,15 +189,35 @@ async function processConsolidationStock({ group_id, data_ref } = {}) {
             const system_unit_id = unidade.system_unit_id || unidade.id;
             const name = unidade.name || unidade.nome || unidade.descricao || `Unidade ${system_unit_id}`;
 
-            log(`🔍 Consolidação estoque | Unidade: ${name} (${system_unit_id}) | Data: ${dataRef}`, 'WorkerConsolidationStock');
+            // 🔒 1) Verifica se JÁ EXISTE consolidação para essa data/unidade
+            const [[jaConsolidado]] = await conn.execute(
+                `SELECT COUNT(*) AS total
+                 FROM diferencas_estoque
+                 WHERE data = ?
+                   AND system_unit_id = ?`,
+                [dataRef, system_unit_id]
+            );
 
-            // Produtos com movimentação no dia
+            if (Number(jaConsolidado?.total || 0) > 0) {
+                log(
+                    `⏭️ Unidade ${name} (${system_unit_id}) já consolidada em ${dataRef} (${jaConsolidado.total} registros em diferencas_estoque). Pulando...`,
+                    'WorkerConsolidationStock'
+                );
+                continue; // NÃO consolida de novo essa unidade
+            }
+
+            log(
+                `🔍 Consolidação estoque | Unidade: ${name} (${system_unit_id}) | Data: ${dataRef}`,
+                'WorkerConsolidationStock'
+            );
+
+            // 2) Produtos com movimentação no dia
             const [prodRows] = await conn.execute(
                 `SELECT DISTINCT produto
-                   FROM movimentacao
-                  WHERE data = ?
-                    AND system_unit_id = ?
-                    AND status = 1`,
+           FROM movimentacao
+          WHERE data = ?
+            AND system_unit_id = ?
+            AND status = 1`,
                 [dataRef, system_unit_id]
             );
 
@@ -221,6 +241,7 @@ async function processConsolidationStock({ group_id, data_ref } = {}) {
 
             log(`✅ Unidade ${name} consolidada (${count} produtos)`, 'WorkerConsolidationStock');
         }
+
 
         log(`✅ Consolidação de estoque finalizada para grupo ${groupId} em ${dataRef}`, 'WorkerConsolidationStock');
     } catch (err) {
