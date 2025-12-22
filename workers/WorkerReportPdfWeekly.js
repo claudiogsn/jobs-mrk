@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { callPHP, formatCurrency, calcularVariacao, sendWhatsappPdf, sendWhatsappText, calcularVariacaoReverse} = require('../utils/utils');
+const { callPHP, formatCurrency, calcularVariacao, sendWhatsappPdf, sendWhatsappText, calcularVariacaoReverse, calcularVariacaoSemBola} = require('../utils/utils');
 const { log } = require('../utils/logger');
 const axios = require('axios');
 
@@ -101,9 +101,10 @@ Segue resumo semanal do *${grupoNome}*, referente a ${dataInicioStr} a ${dataFim
 🛒 Compras: ${formatCurrency(comprasAtual)} [Vs ${formatCurrency(comprasAnterior)}]
 📊 %CMV: ${percentualCMV.toFixed(2)}% [Vs ${percentualCMVAnterior.toFixed(2)}%]
 
-Variação Faturamento: ${calcularVariacao(rAtual.faturamento_bruto, rAnt.faturamento_bruto)}
+Variação Faturamento: ${calcularVariacaoSemBola(rAtual.faturamento_bruto, rAnt.faturamento_bruto)}
+Variação Compras: ${calcularVariacaoSemBola(comprasAtual, comprasAnterior)}
 Variação %CMV: ${calcularVariacaoReverse(percentualCMV, percentualCMVAnterior)}
-Variação Compras: ${calcularVariacao(comprasAtual, comprasAnterior)}
+
 ━━━━━━━━━━━━━━━━━━━
 
 O PDF com os detalhes será enviado a seguir.

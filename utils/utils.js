@@ -19,6 +19,13 @@ function calcularVariacao(atual, anterior) {
     return `${percentual.toFixed(2)}% ${percentual >= 0 ? '🟢' : '🔴'}`;
 }
 
+function calcularVariacaoSemBola(atual, anterior) {
+    if (anterior === 0 && atual > 0) return `100%`;
+    const percentual = ((atual - anterior) / anterior) * 100;
+    if (isNaN(percentual) || !isFinite(percentual)) return '0%';
+    return `${percentual.toFixed(2)}%`;
+}
+
 function calcularVariacaoReverse(atual, anterior) {
     if (anterior === 0 && atual < 0) return `100% 🟢`;
     const percentual = ((atual - anterior) / anterior) * 100;
@@ -165,6 +172,7 @@ module.exports = {
     sendWhatsappText,
     sendWhatsappPdf,
     getConnection,
-    calcularVariacaoReverse
+    calcularVariacaoReverse,
+    calcularVariacaoSemBola
     
 };
