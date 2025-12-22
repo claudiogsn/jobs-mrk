@@ -80,23 +80,23 @@ async function enviarResumoSemanal(contato, grupo) {
 🌅 Boa tarde, *${nome}*!
 Segue resumo semanal do *${grupoNome}*, referente a ${dataInicioStr} a ${dataFimStr}:
 
-📊 Consolidado Faturamento
-💰 Bruto: ${formatCurrency(rAtual.faturamento_bruto)} [Vs ${formatCurrency(rAnt.faturamento_bruto)}]
-🎟 Descontos: ${formatCurrency(rAtual.descontos)} [Vs ${formatCurrency(rAnt.descontos)}]
-🧾 Taxa Serviço: ${formatCurrency(rAtual.taxa_servico)} [Vs ${formatCurrency(rAnt.taxa_servico)}]
-💵 Líquido: ${formatCurrency(rAtual.faturamento_liquido)} [Vs ${formatCurrency(rAnt.faturamento_liquido)}]
-🗒 N.Pedidos Presencial: ${rAtual.pedidos_presencial} [Vs ${rAnt.pedidos_presencial}]
-🛵 N.Pedidos Delivery: ${rAtual.pedidos_delivery} [Vs ${rAnt.pedidos_delivery}]
-👥 Clientes: ${rAtual.numero_clientes} [Vs ${rAnt.numero_clientes}]
-📈 Ticket Médio: ${formatCurrency(ticketAtual)} [Vs ${formatCurrency(ticketAnt)}]
+// 📊 Consolidado Faturamento
+// 💰 Bruto: ${formatCurrency(rAtual.faturamento_bruto)} [Vs ${formatCurrency(rAnt.faturamento_bruto)}]
+// 🎟 Descontos: ${formatCurrency(rAtual.descontos)} [Vs ${formatCurrency(rAnt.descontos)}]
+// 🧾 Taxa Serviço: ${formatCurrency(rAtual.taxa_servico)} [Vs ${formatCurrency(rAnt.taxa_servico)}]
+// 💵 Líquido: ${formatCurrency(rAtual.faturamento_liquido)} [Vs ${formatCurrency(rAnt.faturamento_liquido)}]
+// 🗒 N.Pedidos Presencial: ${rAtual.pedidos_presencial} [Vs ${rAnt.pedidos_presencial}]
+// 🛵 N.Pedidos Delivery: ${rAtual.pedidos_delivery} [Vs ${rAnt.pedidos_delivery}]
+// 👥 Clientes: ${rAtual.numero_clientes} [Vs ${rAnt.numero_clientes}]
+// 📈 Ticket Médio: ${formatCurrency(ticketAtual)} [Vs ${formatCurrency(ticketAnt)}]
+//
+// 📊 Variações
+// • Faturamento Líquido: ${calcularVariacao(rAtual.faturamento_liquido, rAnt.faturamento_liquido)}
+// • N. Pedidos Presencial: ${calcularVariacao(rAtual.pedidos_presencial, rAnt.pedidos_presencial)}
+// • N. Pedidos Delivery: ${calcularVariacao(rAtual.pedidos_delivery, rAnt.pedidos_delivery)}
+// ━━━━━━━━━━━━━━━━━━━
+// 📍 Consolidado Compras
 
-📊 Variações
-• Faturamento Líquido: ${calcularVariacao(rAtual.faturamento_liquido, rAnt.faturamento_liquido)}
-• N. Pedidos Presencial: ${calcularVariacao(rAtual.pedidos_presencial, rAnt.pedidos_presencial)}
-• N. Pedidos Delivery: ${calcularVariacao(rAtual.pedidos_delivery, rAnt.pedidos_delivery)}
-━━━━━━━━━━━━━━━━━━━
-
-📍 Consolidado Compras
 💰 Faturamento: ${formatCurrency(rAtual.faturamento_bruto)} [Vs ${formatCurrency(rAnt.faturamento_bruto)}]
 🛒 Compras: ${formatCurrency(comprasAtual)} [Vs ${formatCurrency(comprasAnterior)}]
 📊 %CMV: ${percentualCMV.toFixed(2)}% [Vs ${percentualCMVAnterior.toFixed(2)}%]
@@ -112,11 +112,11 @@ O PDF com os detalhes será enviado a seguir.
     await sendWhatsappText(telefone, corpoMensagem.trim());
 
     const [urlFat, urlCmp] = await Promise.all([
-        gerarPdfFaturamento(grupoId),
+        // gerarPdfFaturamento(grupoId),
         gerarPdfCompras(grupoId)
     ]);
 
-    if (urlFat) await sendWhatsappPdf(telefone, urlFat);
+    // if (urlFat) await sendWhatsappPdf(telefone, urlFat);
     if (urlCmp) await sendWhatsappPdf(telefone, urlCmp);
 
     return true;
