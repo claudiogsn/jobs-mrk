@@ -76,11 +76,7 @@ async function enviarResumoSemanal(contato, grupo) {
     const percentualCMV = (rAtual.faturamento_bruto > 0) ? (comprasAtual / rAtual.faturamento_bruto) * 100 : 0;
     const percentualCMVAnterior = (rAnt.faturamento_bruto > 0) ? (comprasAnterior / rAnt.faturamento_bruto) * 100 : 0;
 
-    const corpoMensagem = `
-🌅 Boa tarde, *${nome}*!
-Segue resumo semanal do *${grupoNome}*, referente a ${dataInicioStr} a ${dataFimStr}:
-
-// 📊 Consolidado Faturamento
+    // 📊 Consolidado Faturamento
 // 💰 Bruto: ${formatCurrency(rAtual.faturamento_bruto)} [Vs ${formatCurrency(rAnt.faturamento_bruto)}]
 // 🎟 Descontos: ${formatCurrency(rAtual.descontos)} [Vs ${formatCurrency(rAnt.descontos)}]
 // 🧾 Taxa Serviço: ${formatCurrency(rAtual.taxa_servico)} [Vs ${formatCurrency(rAnt.taxa_servico)}]
@@ -97,6 +93,10 @@ Segue resumo semanal do *${grupoNome}*, referente a ${dataInicioStr} a ${dataFim
 // ━━━━━━━━━━━━━━━━━━━
 // 📍 Consolidado Compras
 
+    const corpoMensagem = `
+🌅 Boa tarde, *${nome}*!
+Segue resumo semanal do *${grupoNome}*, referente a ${dataInicioStr} a ${dataFimStr}:
+
 💰 Faturamento: ${formatCurrency(rAtual.faturamento_bruto)} [Vs ${formatCurrency(rAnt.faturamento_bruto)}]
 🛒 Compras: ${formatCurrency(comprasAtual)} [Vs ${formatCurrency(comprasAnterior)}]
 📊 %CMV: ${percentualCMV.toFixed(2)}% [Vs ${percentualCMVAnterior.toFixed(2)}%]
@@ -111,12 +111,8 @@ O PDF com os detalhes será enviado a seguir.
 
     await sendWhatsappText(telefone, corpoMensagem.trim());
 
-    const [urlFat, urlCmp] = await Promise.all([
-        // gerarPdfFaturamento(grupoId),
-        gerarPdfCompras(grupoId)
-    ]);
+    const [urlCmp] = await Promise.all([gerarPdfCompras(grupoId)]);
 
-    // if (urlFat) await sendWhatsappPdf(telefone, urlFat);
     if (urlCmp) await sendWhatsappPdf(telefone, urlCmp);
 
     return true;
