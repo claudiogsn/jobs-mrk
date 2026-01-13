@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { callPHP, formatCurrency, calcularVariacao, sendWhatsappPdf, sendWhatsappText} = require('../utils/utils');
+const { callPHP, formatCurrency, calcularVariacao, sendWhatsappPdf, sendWhatsappText,calcularVariacaoReverse, calcularVariacaoSemBola} = require('../utils/utils');
 const { log } = require('../utils/logger');
 const axios = require('axios');
 
@@ -76,34 +76,36 @@ async function enviarResumoMensal(contato, grupo) {
     const percentualCMV = (rAtual.faturamento_bruto > 0) ? (comprasAtual / rAtual.faturamento_bruto) * 100 : 0;
     const percentualCMVAnterior = (rAnt.faturamento_bruto > 0) ? (comprasAnterior / rAnt.faturamento_bruto) * 100 : 0;
 
+//     📊 Consolidado Faturamento
+// 💰 Bruto: ${formatCurrency(rAtual.faturamento_bruto)} [Vs ${formatCurrency(rAnt.faturamento_bruto)}]
+// 🎟 Descontos: ${formatCurrency(rAtual.descontos)} [Vs ${formatCurrency(rAnt.descontos)}]
+// 🧾 Taxa Serviço: ${formatCurrency(rAtual.taxa_servico)} [Vs ${formatCurrency(rAnt.taxa_servico)}]
+// 💵 Líquido: ${formatCurrency(rAtual.faturamento_liquido)} [Vs ${formatCurrency(rAnt.faturamento_liquido)}]
+// 🗒 N.Pedidos Presencial: ${rAtual.pedidos_presencial} [Vs ${rAnt.pedidos_presencial}]
+// 🛵 N.Pedidos Delivery: ${rAtual.pedidos_delivery} [Vs ${rAnt.pedidos_delivery}]
+// 👥 Clientes: ${rAtual.numero_clientes} [Vs ${rAnt.numero_clientes}]
+// 📈 Ticket Médio: ${formatCurrency(ticketAtual)} [Vs ${formatCurrency(ticketAnt)}]
+//
+// 📊 Variações
+// • Faturamento Líquido: ${calcularVariacao(rAtual.faturamento_liquido, rAnt.faturamento_liquido)}
+// • N. Pedidos Presencial: ${calcularVariacao(rAtual.pedidos_presencial, rAnt.pedidos_presencial)}
+// • N. Pedidos Delivery: ${calcularVariacao(rAtual.pedidos_delivery, rAnt.pedidos_delivery)}
+// ━━━━━━━━━━━━━━━━━━━
+//
+// 📍 Consolidado Compras
+
     const corpoMensagem = `
 🌅 Boa tarde, *${nome}*!
 Segue resumo mensal do *${grupoNome}*, referente a ${dataInicioStr} a ${dataFimStr}:
 
-📊 Consolidado Faturamento
-💰 Bruto: ${formatCurrency(rAtual.faturamento_bruto)} [Vs ${formatCurrency(rAnt.faturamento_bruto)}]
-🎟 Descontos: ${formatCurrency(rAtual.descontos)} [Vs ${formatCurrency(rAnt.descontos)}]
-🧾 Taxa Serviço: ${formatCurrency(rAtual.taxa_servico)} [Vs ${formatCurrency(rAnt.taxa_servico)}]
-💵 Líquido: ${formatCurrency(rAtual.faturamento_liquido)} [Vs ${formatCurrency(rAnt.faturamento_liquido)}]
-🗒 N.Pedidos Presencial: ${rAtual.pedidos_presencial} [Vs ${rAnt.pedidos_presencial}]
-🛵 N.Pedidos Delivery: ${rAtual.pedidos_delivery} [Vs ${rAnt.pedidos_delivery}]
-👥 Clientes: ${rAtual.numero_clientes} [Vs ${rAnt.numero_clientes}]
-📈 Ticket Médio: ${formatCurrency(ticketAtual)} [Vs ${formatCurrency(ticketAnt)}]
 
-📊 Variações
-• Faturamento Líquido: ${calcularVariacao(rAtual.faturamento_liquido, rAnt.faturamento_liquido)}
-• N. Pedidos Presencial: ${calcularVariacao(rAtual.pedidos_presencial, rAnt.pedidos_presencial)}
-• N. Pedidos Delivery: ${calcularVariacao(rAtual.pedidos_delivery, rAnt.pedidos_delivery)}
-━━━━━━━━━━━━━━━━━━━
-
-📍 Consolidado Compras
 💰 Faturamento: ${formatCurrency(rAtual.faturamento_bruto)} [Vs ${formatCurrency(rAnt.faturamento_bruto)}]
 🛒 Compras: ${formatCurrency(comprasAtual)} [Vs ${formatCurrency(comprasAnterior)}]
 📊 %CMV: ${percentualCMV.toFixed(2)}% [Vs ${percentualCMVAnterior.toFixed(2)}%]
 
-Variação Faturamento: ${calcularVariacao(rAtual.faturamento_bruto, rAnt.faturamento_bruto)}
-Variação %CMV: ${calcularVariacao(percentualCMV, percentualCMVAnterior)}
-Variação Compras: ${calcularVariacao(comprasAtual, comprasAnterior)}
+Variação Faturamento: ${calcularVariacaoSemBola(rAtual.faturamento_bruto, rAnt.faturamento_bruto)}
+Variação Compras: ${calcularVariacaoSemBola(comprasAtual, comprasAnterior)}
+Variação %CMV: ${calcularVariacaoReverse(percentualCMV, percentualCMVAnterior)}
 ━━━━━━━━━━━━━━━━━━━
 
 O PDF com os detalhes será enviado a seguir.
