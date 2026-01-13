@@ -20,6 +20,8 @@ const { enviarResumoSemanal, WorkerReportPdfWeekly } = require('./workers/Worker
 const { enviarResumoMensal, WorkerReportPdfMonthly } = require('./workers/WorkerReportPdfMonthly');
 const {enviarNotasPendentes, WorkerNotasPendentes} = require('./workers/workerNotasPendentes');
 const { enviarAuditoriaCop } = require('./workers/workerCopReport');
+const { ProcessJobTransferNotify } = require('./workers/WorkerTransferNotify');
+
 
 
 
@@ -74,6 +76,28 @@ console.log = (...args) => {
     originalLog(msg);
 };
 // === Workers ===
+
+
+router.post('/notify/transferencia', async (req, res) => {
+    const { system_unit_id, user_id, transfer_key } = req.body;
+
+    if (!system_unit_id || !user_id || !transfer_key) {
+        return res.status(400).send(
+            '❌ Parâmetros obrigatórios: system_unit_id, user_id, transfer_key'
+        );
+    }
+
+    try {
+        await ProcessJobTransferNotify(system_unit_id, user_id, transfer_key);
+
+        res.send('✅ Transferência processada e enviada com sucesso');
+    } catch (err) {
+        log(`❌ Erro ao executar ProcessJobTransferNotify: ${err.message}`, 'ExpressServer');
+        res.status(500).send('❌ Erro ao processar transferência.');
+    }
+});
+
+
 router.post('/run/movimentocaixa', async (req, res) => {
     const { group_id, dt_inicio, dt_fim } = req.body;
 
