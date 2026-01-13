@@ -20,7 +20,7 @@ const { enviarResumoSemanal, WorkerReportPdfWeekly } = require('./workers/Worker
 const { enviarResumoMensal, WorkerReportPdfMonthly } = require('./workers/WorkerReportPdfMonthly');
 const {enviarNotasPendentes, WorkerNotasPendentes} = require('./workers/workerNotasPendentes');
 const { enviarAuditoriaCop } = require('./workers/workerCopReport');
-const { ProcessJobTransferNotify } = require('./workers/WorkerTransferNotify');
+const { ProcessJobTransferNotify } = require('./workers/workerTransferNotify');
 
 
 
