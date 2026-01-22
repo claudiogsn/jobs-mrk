@@ -114,7 +114,6 @@ O PDF com os detalhes será enviado a seguir.
     await sendWhatsappText(telefone, corpoMensagem.trim());
 
     const [urlFat, urlCmp] = await Promise.all([
-        gerarPdfFaturamento(grupoId, 'mensal'),
         gerarPdfCompras(grupoId, 'mensal')
     ]);
 
