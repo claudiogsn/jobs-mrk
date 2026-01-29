@@ -11,10 +11,8 @@ const sqs = new SQSClient({
     }
 });
 
-// helper local pra formatar data YYYY-MM-DD -> DD/MM/YYYY
 function formatDateBr(dateStr) {
     if (!dateStr) return '';
-    // aceita também datetime (YYYY-MM-DD HH:MM:SS)
     const [data] = dateStr.split(' ');
     const parts = data.split('-');
     if (parts.length !== 3) return dateStr;
@@ -38,7 +36,6 @@ async function enviarNotasPendentes(contato, grupo) {
     let totalNotasPendentesGeral = 0;
 
     for (const unidade of unidades) {
-        // aqui assumo que getUnitsByGroup retorna "id" (system_unit_id) e "name"
         const systemUnitId = unidade.system_unit_id;
         const unitName = unidade.name || unidade.nome || unidade.descricao || `Unidade ${systemUnitId}`;
 

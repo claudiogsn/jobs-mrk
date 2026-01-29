@@ -15,7 +15,7 @@ const { processConsolidationStock } = require('./workers/WorkerConsolidationStoc
 
 const { agendarJobsDinamicos } = require('./cron/agendador');
 
-const { enviarResumoDiario, WorkerResumoDiario } = require('./workers/WorkerDisparoFaturamento');
+const { enviarResumoDiario, WorkerResumoDiario} = require('./workers/WorkerDisparoFaturamento');
 const { enviarResumoSemanal, WorkerReportPdfWeekly } = require('./workers/WorkerReportPdfWeekly');
 const { enviarResumoMensal, WorkerReportPdfMonthly } = require('./workers/WorkerReportPdfMonthly');
 const {enviarNotasPendentes, WorkerNotasPendentes} = require('./workers/workerNotasPendentes');
@@ -94,6 +94,35 @@ router.post('/notify/transferencia', async (req, res) => {
     } catch (err) {
         log(`❌ Erro ao executar ProcessJobTransferNotify: ${err.message}`, 'ExpressServer');
         res.status(500).send('❌ Erro ao processar transferência.');
+    }
+});
+
+router.post('/run/resumo-diario', async (req, res) => {
+    // Extrai os dados necessários para simular o contato e o grupo
+    const { nome, telefone, group_id, group_name, data } = req.body;
+
+    // Validação básica
+    if (!nome || !telefone || !group_id || !group_name || !data) {
+        return res.status(400).send('❌ Parâmetros obrigatórios ausentes: nome, telefone, group_id, group_name, data (YYYY-MM-DD)');
+    }
+
+    try {
+        // Monta os objetos que a função espera
+        const contato = { nome, telefone };
+        const grupo = { id: group_id, nome: group_name };
+
+        // Chama a função passando a data específica
+        await enviarResumoDiario(contato, grupo, data);
+
+        // Retorna no padrão solicitado
+        res.send(`✅ Worker - <strong>Resumo Diário</strong> enviado com sucesso:<br>
+                  <b>Cliente:</b> ${nome}<br>
+                  <b>Grupo:</b> ${group_name} (ID: ${group_id})<br>
+                  <b>Data Ref:</b> ${formatDateBr(data)}`);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(`❌ Erro ao executar worker: ${error.message}`);
     }
 });
 

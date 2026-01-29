@@ -11,7 +11,6 @@
 
 <body class="bg-white text-gray-800 font-sans">
 
-<!-- Tela de Login -->
 <div id="loginScreen" class="fixed inset-0 bg-white flex items-center justify-center z-50">
     <div class="bg-gray-100 border rounded shadow-lg p-6 w-full max-w-sm">
         <h2 class="text-xl font-semibold mb-4 text-center">Acesso Restrito</h2>
@@ -32,7 +31,6 @@
 </nav>
 
 <main class="container mx-auto p-6 hidden" id="mainContent">
-    <!-- Logs -->
     <section id="logs" class="hidden">
         <h2 class="text-2xl font-semibold mb-4">Logs em Tempo Real</h2>
         <div class="bg-gray-100 border border-gray-300 rounded p-4 h-[70vh] overflow-y-auto" id="logsDisplay">
@@ -43,57 +41,66 @@
     <section id="processamento">
         <h2 class="text-2xl font-semibold mb-4">Executar Workers</h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <!-- Worker ItemVenda -->
-            <div class="border rounded p-6 shadow">
-                <h3 class="font-bold mb-2">1 - Buscar vendas API Menew</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+            <div class="border rounded p-6 shadow bg-white">
+                <h3 class="font-bold mb-2 text-blue-700">1 - Buscar vendas API Menew</h3>
                 <input id="itemvenda_group" class="input" placeholder="group_id (opcional)" />
                 <input id="itemvenda_inicio" class="input" type="date" />
                 <input id="itemvenda_fim" class="input" type="date" />
                 <button onclick="runWorker('itemvenda')" class="btn">Executar</button>
             </div>
 
-            <!-- Worker Consolidate -->
-            <div class="border rounded p-6 shadow">
-                <h3 class="font-bold mb-2">2 - Sumarizar as vendas</h3>
+            <div class="border rounded p-6 shadow bg-white">
+                <h3 class="font-bold mb-2 text-blue-700">2 - Sumarizar as vendas</h3>
                 <input id="consolidate_group" class="input" placeholder="group_id (opcional)" />
                 <input id="consolidate_inicio" class="input" type="date" />
                 <input id="consolidate_fim" class="input" type="date" />
                 <button onclick="runWorker('consolidate')" class="btn">Executar</button>
             </div>
 
-            <!-- Worker DocSaida -->
-            <div class="border rounded p-6 shadow">
-                <h3 class="font-bold mb-2">3 - Realizar Baixa de Estoque</h3>
+            <div class="border rounded p-6 shadow bg-white">
+                <h3 class="font-bold mb-2 text-blue-700">3 - Realizar Baixa de Estoque</h3>
                 <input id="docsaida_group" class="input" placeholder="group_id (opcional)" />
                 <input id="docsaida_data" class="input" type="date" />
-                <button onclick="runWorker('docsaida')" class="btn">Executar</button>
+                <div class="mb-2 invisible">Spacer</div> <button onclick="runWorker('docsaida')" class="btn mt-auto">Executar</button>
             </div>
 
-            <!-- Worker MovimentoCaixa -->
-            <div class="border rounded p-6 shadow">
-                <h3 class="font-bold mb-2">4 - Movimento de Caixa</h3>
+            <div class="border rounded p-6 shadow bg-white">
+                <h3 class="font-bold mb-2 text-blue-700">4 - Movimento de Caixa</h3>
                 <input id="movcaixa_group" class="input" placeholder="group_id (opcional)" />
                 <input id="movcaixa_inicio" class="input" type="date" />
                 <input id="movcaixa_fim" class="input" type="date" />
                 <button onclick="runWorker('movimentocaixa')" class="btn">Executar</button>
             </div>
+
+            <div class="border rounded p-6 shadow bg-blue-50 border-blue-200">
+                <h3 class="font-bold mb-2 text-green-700 flex items-center gap-2">
+                    5 - Resumo Diário (WhatsApp)
+                </h3>
+                <input id="resumo_nome" class="input" placeholder="Nome do Cliente" />
+                <input id="resumo_telefone" class="input" placeholder="Telefone (55119...)" />
+                <div class="flex gap-2">
+                    <input id="resumo_group_id" class="input w-1/3" placeholder="ID Grp" />
+                    <input id="resumo_group_nome" class="input w-2/3" placeholder="Nome Grupo" />
+                </div>
+                <input id="resumo_data" class="input" type="date" />
+                <button onclick="runWorker('resumo-diario')" class="btn bg-green-600 hover:bg-green-700 w-full">Enviar WhatsApp</button>
+            </div>
         </div>
 
-        <!-- Logs abaixo dos 3 blocos -->
-        <div class="border rounded p-4 shadow">
+        <div class="border rounded p-4 shadow bg-white">
             <h3 class="font-bold mb-2">🖨️ Console.log em tempo real</h3>
-            <div id="stdout" class="bg-gray-100 h-[250px] overflow-y-auto text-sm font-mono p-2 border rounded"></div>
+            <div id="stdout" class="bg-gray-900 text-green-400 h-[250px] overflow-y-auto text-sm font-mono p-2 border rounded"></div>
         </div>
     </section>
 
-    <!-- Rodapé com logo -->
     <div class="mt-8 text-center">
         <img src="./jobs/assets/logo.png" alt="Logo Meraki" class="mx-auto w-[30%] max-w-xs opacity-80" />
     </div>
 </main>
 
 <script>
+    // --- Autenticação ---
     async function autenticar() {
         const usuario = document.getElementById('login_user').value;
         const senha = document.getElementById('login_pass').value;
@@ -116,6 +123,7 @@
             if (data.success) {
                 document.getElementById('loginScreen').style.display = 'none';
                 document.getElementById('mainContent').classList.remove('hidden');
+                initStyles(); // Aplica estilos nos inputs criados
             } else {
                 Swal.fire('Erro', 'Usuário ou senha inválidos.', 'error');
             }
@@ -125,100 +133,123 @@
         }
     }
 
+    // --- Execução dos Workers ---
     async function runWorker(type) {
         const payload = {};
         let group_id = '', dt_inicio = '', dt_fim = '', data = '';
+        let confirmText = '';
 
+        // 1. Item Venda
         if (type === 'itemvenda') {
             group_id = document.getElementById('itemvenda_group').value;
             dt_inicio = document.getElementById('itemvenda_inicio').value;
             dt_fim = document.getElementById('itemvenda_fim').value;
+            if (!dt_inicio || !dt_fim) return Swal.fire('Atenção', 'Preencha datas início e fim.', 'warning');
 
-            if (!dt_inicio || !dt_fim) {
-                Swal.fire('Atenção', 'Preencha as datas de início e fim.', 'warning');
-                return;
-            }
-
-            payload.group_id = group_id;
-            payload.dt_inicio = dt_inicio;
-            payload.dt_fim = dt_fim;
-
-        } else if (type === 'consolidate') {
+            payload.group_id = group_id; payload.dt_inicio = dt_inicio; payload.dt_fim = dt_fim;
+            confirmText = `Buscar Vendas<br>Grupo: ${group_id || 'Todos'}<br>Data: ${formatarData(dt_inicio)} a ${formatarData(dt_fim)}`;
+        }
+        // 2. Consolidate
+        else if (type === 'consolidate') {
             group_id = document.getElementById('consolidate_group').value;
             dt_inicio = document.getElementById('consolidate_inicio').value;
             dt_fim = document.getElementById('consolidate_fim').value;
+            if (!dt_inicio || !dt_fim) return Swal.fire('Atenção', 'Preencha datas início e fim.', 'warning');
 
-            if (!dt_inicio || !dt_fim) {
-                Swal.fire('Atenção', 'Preencha as datas de início e fim.', 'warning');
-                return;
-            }
-
-            payload.group_id = group_id;
-            payload.dt_inicio = dt_inicio;
-            payload.dt_fim = dt_fim;
-
-        } else if (type === 'docsaida') {
+            payload.group_id = group_id; payload.dt_inicio = dt_inicio; payload.dt_fim = dt_fim;
+            confirmText = `Sumarizar Vendas<br>Grupo: ${group_id || 'Todos'}<br>Data: ${formatarData(dt_inicio)} a ${formatarData(dt_fim)}`;
+        }
+        // 3. Doc Saida
+        else if (type === 'docsaida') {
             group_id = document.getElementById('docsaida_group').value;
             data = document.getElementById('docsaida_data').value;
+            if (!data) return Swal.fire('Atenção', 'Preencha a data.', 'warning');
 
-            if (!data) {
-                Swal.fire('Atenção', 'Preencha a data para baixa de estoque.', 'warning');
-                return;
+            payload.group_id = group_id; payload.data = data;
+            confirmText = `Baixa de Estoque<br>Grupo: ${group_id || 'Todos'}<br>Data: ${formatarData(data)}`;
+        }
+        // 4. Movimento Caixa
+        else if (type === 'movimentocaixa') {
+            group_id = document.getElementById('movcaixa_group').value;
+            dt_inicio = document.getElementById('movcaixa_inicio').value;
+            dt_fim = document.getElementById('movcaixa_fim').value;
+            if (!dt_inicio || !dt_fim) return Swal.fire('Atenção', 'Preencha datas início e fim.', 'warning');
+
+            payload.group_id = group_id; payload.dt_inicio = dt_inicio; payload.dt_fim = dt_fim;
+            confirmText = `Movimento de Caixa<br>Grupo: ${group_id || 'Todos'}<br>Data: ${formatarData(dt_inicio)} a ${formatarData(dt_fim)}`;
+        }
+        // 5. Resumo Diário (NOVO)
+        else if (type === 'resumo-diario') {
+            const nome = document.getElementById('resumo_nome').value;
+            const telefone = document.getElementById('resumo_telefone').value;
+            const grp_id = document.getElementById('resumo_group_id').value;
+            const grp_nome = document.getElementById('resumo_group_nome').value;
+            data = document.getElementById('resumo_data').value;
+
+            if (!nome || !telefone || !grp_id || !grp_nome || !data) {
+                return Swal.fire('Atenção', 'Preencha todos os campos do Resumo (Nome, Telefone, ID Grupo, Nome Grupo e Data).', 'warning');
             }
 
-            payload.group_id = group_id;
+            payload.nome = nome;
+            payload.telefone = telefone;
+            payload.group_id = grp_id;
+            payload.group_name = grp_nome;
             payload.data = data;
-        } else if (type === 'movimentocaixa') {
-        group_id = document.getElementById('movcaixa_group').value;
-        dt_inicio = document.getElementById('movcaixa_inicio').value;
-        dt_fim = document.getElementById('movcaixa_fim').value;
 
-        if (!dt_inicio || !dt_fim) {
-            Swal.fire('Atenção', 'Preencha as datas de início e fim.', 'warning');
-            return;
+            confirmText = `Enviar WhatsApp (Resumo)<br><b>${nome}</b><br>Grupo: ${grp_nome}<br>Ref: ${formatarData(data)}`;
         }
 
-        payload.group_id = group_id;
-        payload.dt_inicio = dt_inicio;
-        payload.dt_fim = dt_fim;
-    }
-
-        const formatarData = (dataISO) => {
-            if (!dataISO) return '';
-            const [ano, mes, dia] = dataISO.split('-');
-            return `${dia}/${mes}/${ano}`;
-        };
-
+        // Confirmação
         const confirmacao = await Swal.fire({
             icon: 'question',
-            title: 'Deseja continuar?',
-            html: `Deseja realmente executar este worker com os parâmetros informados?<br><b>Grupo</b>: ${group_id || '1'}<br><b>Data</b>: ${formatarData(data || dt_inicio)}`,
+            title: 'Confirmar Execução',
+            html: confirmText,
             showCancelButton: true,
             confirmButtonText: 'Sim, executar',
-            cancelButtonText: 'Cancelar'
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#2563EB',
+            cancelButtonColor: '#d33'
         });
 
         if (!confirmacao.isConfirmed) return;
 
-        const loading = Swal.fire({
-            title: 'Executando...',
+        // Loading
+        Swal.fire({
+            title: 'Processando...',
+            html: 'Aguarde a resposta do servidor.',
             allowOutsideClick: false,
             didOpen: () => Swal.showLoading()
         });
 
         try {
+            // Nota: Se type for 'resumo-diario', a URL será /jobs/run/resumo-diario
             const res = await fetch(`/jobs/run/${type}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
             const text = await res.text();
+
             Swal.close();
-            Swal.fire('Finalizado', text, 'success');
+
+            if(res.ok) {
+                Swal.fire('Sucesso', text, 'success');
+            } else {
+                Swal.fire('Erro no Servidor', text, 'error');
+            }
+
         } catch (error) {
             Swal.close();
-            Swal.fire('Erro', 'Falha ao executar o worker.', 'error');
+            Swal.fire('Erro de Conexão', 'Falha ao contactar o servidor.', 'error');
+            console.error(error);
         }
+    }
+
+    // --- Utilitários ---
+    function formatarData(dataISO) {
+        if (!dataISO) return '';
+        const [ano, mes, dia] = dataISO.split('-');
+        return `${dia}/${mes}/${ano}`;
     }
 
     function showSection(id) {
@@ -234,39 +265,34 @@
             const stdoutEl = document.getElementById('stdout');
             stdoutEl.innerText = logs.join('\n');
             stdoutEl.scrollTop = stdoutEl.scrollHeight;
-        } catch {
-            document.getElementById('stdout').innerText = 'Erro ao carregar saída do console.';
-        }
+        } catch { }
     }
-
-    setInterval(loadStdout, 3000);
-    loadStdout();
 
     async function loadLogs() {
         try {
             const res = await fetch('/jobs/logs');
             const logs = await res.json();
             document.getElementById('logsDisplay').innerText = logs.join('\n');
-        } catch (err) {
-            document.getElementById('logsDisplay').innerText = 'Erro ao carregar logs.';
-        }
+        } catch { }
     }
 
+    // Inicia loops de log
     setInterval(loadStdout, 3000);
     loadStdout();
 
-    async function loadLogs() {
-        try {
-            const res = await fetch('/jobs/logs');
-            const logs = await res.json();
-            document.getElementById('logsDisplay').innerText = logs.join('\n');
-        } catch (err) {
-            document.getElementById('logsDisplay').innerText = 'Erro ao carregar logs.';
-        }
+    // Aplica classes CSS dinamicamente após login
+    function initStyles() {
+        document.querySelectorAll('.input').forEach(i => {
+            if(!i.classList.contains('border')) { // evita duplicar classes
+                i.classList.add('w-full', 'border', 'border-gray-300', 'p-2', 'mb-2', 'rounded', 'focus:outline-none', 'focus:ring-2', 'focus:ring-blue-500');
+            }
+        });
+        document.querySelectorAll('.btn').forEach(b => {
+            if(!b.classList.contains('px-4') && !b.classList.contains('w-full')) {
+                b.classList.add('bg-blue-600', 'text-white', 'px-4', 'py-2', 'rounded', 'hover:bg-blue-700', 'transition', 'duration-200');
+            }
+        });
     }
-
-    document.querySelectorAll('.input').forEach(i => i.classList.add('w-full', 'border', 'p-2', 'mb-2', 'rounded'));
-    document.querySelectorAll('.btn').forEach(b => b.classList.add('bg-blue-600', 'text-white', 'px-4', 'py-2', 'rounded', 'hover:bg-blue-700'));
 </script>
 
 </body>

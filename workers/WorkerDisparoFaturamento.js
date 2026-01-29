@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
-const { callPHP, formatCurrency, calcularVariacao} = require('../utils/utils');
+const { callPHP, formatCurrency, calcularVariacao } = require('../utils/utils');
 const { log } = require('../utils/logger');
 
 const sqs = new SQSClient({
@@ -11,13 +11,47 @@ const sqs = new SQSClient({
     }
 });
 
-async function enviarResumoDiario(contato, grupo) {
+// Função auxiliar para calcular datas se uma data específica for fornecida
+function calcularIntervalosManuais(dataString) {
+    // dataString deve ser YYYY-MM-DD (ex: 2025-12-22)
+    const targetDate = new Date(dataString + 'T00:00:00');
+    const pastDate = new Date(targetDate);
+    pastDate.setDate(targetDate.getDate() - 7);
+
+    const formatDate = (date, isEnd = false) => {
+        const y = date.getFullYear();
+        const m =String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        const time = isEnd ? '23:59:59' : '00:00:00';
+        return `${y}-${m}-${d} ${time}`;
+    };
+
+    return {
+        dt_inicio: formatDate(targetDate, false),
+        dt_fim: formatDate(targetDate, true),
+        dt_inicio_anterior: formatDate(pastDate, false),
+        dt_fim_anterior: formatDate(pastDate, true)
+    };
+}
+
+// Modificamos a função para aceitar 'dataEspecifica' (opcional)
+async function enviarResumoDiario(contato, grupo, dataEspecifica = null) {
     const { nome, telefone } = contato;
     const groupId = grupo.id;
     const grupoNome = grupo.nome;
 
-    const intervalos = await callPHP('getIntervalosDiarios', {});
+    let intervalos;
+
+    // LÓGICA NOVA: Se vier data específica, calcula no JS. Se não, busca do PHP (padrão ontem)
+    if (dataEspecifica) {
+        intervalos = calcularIntervalosManuais(dataEspecifica);
+    } else {
+        intervalos = await callPHP('getIntervalosDiarios', {});
+    }
+
     const { dt_inicio, dt_fim, dt_inicio_anterior, dt_fim_anterior } = intervalos;
+
+    // Ajuste visual da data para a mensagem
     const dataRef = dt_inicio.split(' ')[0].split('-').reverse().join('/');
 
     // Pega as lojas do grupo
@@ -44,19 +78,24 @@ async function enviarResumoDiario(contato, grupo) {
         ticket_medio_soma_semanal: 0,
         numero_clientes_semanal: 0,
         numero_pedidos: 0,
-        numero_pedidos_semanal: 0
+        numero_pedidos_semanal: 0,
+        pedidos_presencial: 0,
+        pedidos_delivery: 0,
+        pedidos_presencial_semanal: 0,
+        pedidos_delivery_semanal: 0
     };
 
     for (const unidade of unidades) {
         const { custom_code, name: unitName } = unidade;
 
-        // Consulta para ontem (intervalo atual)
+        // Consulta para a data alvo
         const resumoOntem = await callPHP('generateResumoFinanceiroPorLoja', {
             lojaid: custom_code,
             dt_inicio,
             dt_fim
         });
 
+        // Consulta para a semana anterior (comparativo)
         const resumoSemanaPassada = await callPHP('generateResumoFinanceiroPorLoja', {
             lojaid: custom_code,
             dt_inicio: dt_inicio_anterior,
@@ -72,11 +111,10 @@ async function enviarResumoDiario(contato, grupo) {
             resumoOntem.faturamento_bruto === 0 &&
             resumoOntem.faturamento_liquido === 0 &&
             resumoOntem.descontos === 0 &&
-            resumoOntem.taxa_servico === 0 &&
-            resumoOntem.numero_clientes === 0 &&
             resumoOntem.numero_pedidos === 0
         ) {
-            log(`⚠️ Loja ${unitName} sem faturamento no período. Ignorada.`, 'enviarResumoDiario');
+            // Log apenas informativo, não bloqueante se for envio manual
+            // log(`⚠️ Loja ${unitName} sem faturamento no período. Ignorada.`, 'enviarResumoDiario');
             continue;
         }
 
@@ -104,13 +142,11 @@ Variação de N.Pedidos Delivery: ${calcularVariacao(resumoOntem.pedidos_deliver
         total.taxa_servico += resumoOntem.taxa_servico;
         total.numero_clientes += resumoOntem.numero_clientes;
         total.ticket_medio_soma += resumoOntem.ticket_medio;
-        total.numero_pedidos += resumoOntem.numero_pedidos;7
-        total.pedidos_presencial = (total.pedidos_presencial || 0) + (resumoOntem.pedidos_presencial || 0);
-        total.pedidos_delivery = (total.pedidos_delivery || 0) + (resumoOntem.pedidos_delivery || 0);
-
+        total.numero_pedidos += resumoOntem.numero_pedidos;
+        total.pedidos_presencial += (resumoOntem.pedidos_presencial || 0);
+        total.pedidos_delivery += (resumoOntem.pedidos_delivery || 0);
 
         total.lojas++;
-
 
         total.faturamento_bruto_semanal += resumoSemanaPassada.faturamento_bruto;
         total.faturamento_liquido_semanal += resumoSemanaPassada.faturamento_liquido;
@@ -119,8 +155,8 @@ Variação de N.Pedidos Delivery: ${calcularVariacao(resumoOntem.pedidos_deliver
         total.ticket_medio_soma_semanal += resumoSemanaPassada.ticket_medio;
         total.numero_clientes_semanal += resumoSemanaPassada.numero_clientes;
         total.numero_pedidos_semanal += resumoSemanaPassada.numero_pedidos;
-        total.pedidos_presencial_semanal = (total.pedidos_presencial_semanal || 0) + (resumoSemanaPassada.pedidos_presencial || 0);
-        total.pedidos_delivery_semanal = (total.pedidos_delivery_semanal || 0) + (resumoSemanaPassada.pedidos_delivery || 0);
+        total.pedidos_presencial_semanal += (resumoSemanaPassada.pedidos_presencial || 0);
+        total.pedidos_delivery_semanal += (resumoSemanaPassada.pedidos_delivery || 0);
     }
 
     if (total.lojas > 1) {
@@ -128,8 +164,8 @@ Variação de N.Pedidos Delivery: ${calcularVariacao(resumoOntem.pedidos_deliver
             `📊 *Consolidado Geral*
 💰 *Bruto:* *${formatCurrency(total.faturamento_bruto)}* [Vs ${formatCurrency(total.faturamento_bruto_semanal)}]
 💵 *Líquido:* *${formatCurrency(total.faturamento_liquido)}* [Vs ${formatCurrency(total.faturamento_liquido_semanal)}]
-🗒 *N.Pedidos Presencial:* *${total.pedidos_presencial || 0}* [Vs ${total.pedidos_presencial_semanal}]
-🛵 *N.Pedidos Delivery:* *${total.pedidos_delivery || 0}* [Vs ${total.pedidos_delivery_semanal}]
+🗒 *N.Pedidos Presencial:* *${total.pedidos_presencial}* [Vs ${total.pedidos_presencial_semanal}]
+🛵 *N.Pedidos Delivery:* *${total.pedidos_delivery}* [Vs ${total.pedidos_delivery_semanal}]
 🎟 *Descontos:* *${formatCurrency(total.descontos)}* [Vs ${formatCurrency(total.descontos_semanal)}]
 🧾 *Taxa Serviço:* *${formatCurrency(total.taxa_servico)}* [Vs ${formatCurrency(total.taxa_servico_semanal)}]
 👥 *Clientes:* *${total.numero_clientes}* [Vs ${total.numero_clientes_semanal}]
@@ -143,7 +179,8 @@ Variação de N.Pedidos Delivery: ${calcularVariacao(resumoOntem.pedidos_deliver
 
     if (total.lojas === 0) {
         log(`🚫 Nenhuma loja com faturamento para ${nome} (${grupoNome}). Mensagem não enviada.`, 'enviarResumoDiario');
-        return;
+        // Se for disparo manual, pode ser interessante avisar que não houve dados
+        return false;
     }
 
     const mensagem = `🌅 Bom dia, *${nome}!*
@@ -161,12 +198,16 @@ ${corpoMensagem.trim()}`;
         }));
 
         log(`✅ Mensagem enviada para ${nome} (${telefone})`, 'enviarResumoDiario');
+        return true;
     } catch (err) {
         log(`❌ Falha ao enviar para ${nome}: ${err.message}`, 'enviarResumoDiario');
+        throw err;
     }
 }
 
+
 async function WorkerResumoDiario() {
+    // ... mantido igual ...
     const contatosResp = await callPHP('getContatosByDisparo', { id_disparo: 1 });
     if (!contatosResp.success) {
         log('❌ Erro ao buscar contatos', 'WorkerFilaWhatsapp');
@@ -175,14 +216,14 @@ async function WorkerResumoDiario() {
 
     for (const contato of contatosResp.data) {
         for (const grupo of contato.grupos) {
-            await enviarResumoDiario(contato, grupo);
+            await enviarResumoDiario(contato, grupo); // Sem data = usa a lógica padrão
         }
     }
 }
 
 module.exports = {
     enviarResumoDiario,
-    WorkerResumoDiario
+    WorkerResumoDiario,
 };
 
 if (require.main === module) {
