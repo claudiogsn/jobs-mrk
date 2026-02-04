@@ -2,7 +2,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
-const { getLogs,log} = require('./utils/logger');
+const { getLogs,log,sendWhatsappText} = require('./utils/logger');
 
 const { processItemVenda } = require('./workers/workerItemVenda');
 const { processConsolidation } = require('./workers/workerConsolidateSales');
@@ -59,10 +59,7 @@ router.get('/logo.png', (req, res) => {
     res.sendFile(path.join(__dirname, 'assets/logo.png'));
 });
 
-// 🔹 Servir arquivos da pasta workers/reports
-// URL final: https://portal.mrksolucoes.com.br/jobs/reports/NOME_DO_ARQUIVO.pdf
 router.use('/reports', express.static(REPORTS_DIR));
-
 
 console.log = (...args) => {
     const timestamp = new Date().toLocaleString('pt-BR', {
@@ -75,9 +72,8 @@ console.log = (...args) => {
     if (liveLogs.length > MAX_LOGS) liveLogs.shift();
     originalLog(msg);
 };
+
 // === Workers ===
-
-
 router.post('/notify/transferencia', async (req, res) => {
     const { system_unit_id, user_id, transfer_key } = req.body;
 
@@ -125,7 +121,6 @@ router.post('/run/resumo-diario', async (req, res) => {
         res.status(500).send(`❌ Erro ao executar worker: ${error.message}`);
     }
 });
-
 
 router.post('/run/movimentocaixa', async (req, res) => {
     const { group_id, dt_inicio, dt_fim } = req.body;
@@ -274,8 +269,6 @@ router.post('/run/consolidacao-estoque', async (req, res) => {
     }
 });
 
-
-
 router.post('/run/docsaida', async (req, res) => {
     const { group_id, data } = req.body;
 
@@ -291,7 +284,23 @@ router.post('/run/financeiro', async (req, res) => {
     await dispatchFinanceiro();
     res.send('✅ Worker Financeiro iniciado.');
 });
+
 // === Workers de Whatsapp ===
+router.post('run/sendWhatsapp', async (req, res) => {
+    const { telefone, mensagem } = req.body;
+
+    if (!telefone || !mensagem) {
+        return res.status(400).send('❌ Parâmetros obrigatórios: telefone, mensagem');
+    }
+
+    try {
+        await sendWhatsappText(telefone, mensagem);
+        res.send(`✅ Mensagem enviada para ${telefone}`);
+    } catch (err) {
+        log(`❌ Erro ao enviar mensagem para ${telefone}: ${err.message}`, 'ExpressServer');
+        res.status(500).send('❌ Erro ao enviar mensagem.');
+    }
+})
 router.post('/run/wpp-diario', async (req, res) => {
     await WorkerResumoDiario();
     res.send('✅ Worker Disparo Fatuiramento.');
@@ -364,7 +373,6 @@ router.post('/run/send-cop', async (req, res) => {
         res.status(500).send('❌ Erro ao enviar resumo.');
     }
 });
-
 
 router.post('/run/resumo-semanal', async (req, res) => {
     const { contato, grupo } = req.body;
@@ -449,6 +457,7 @@ router.post('/reload-cron', async (req, res) => {
         res.status(500).send('Erro ao recarregar jobs.');
     }
 });
+
 // === Logs ===
 router.get('/logs', (req, res) => {
     const logFilePath = path.resolve(__dirname, 'logs/api.log');
@@ -462,6 +471,7 @@ router.get('/logs', (req, res) => {
 router.get('/stdout', (req, res) => {
     res.json(liveLogs);
 });
+
 // === Autenticação ===
 router.post('/auth', (req, res) => {
     const { usuario, senha } = req.body;

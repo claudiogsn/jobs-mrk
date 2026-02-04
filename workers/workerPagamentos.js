@@ -399,8 +399,8 @@ module.exports = { ExecuteJobConferencia };
 if (require.main === module) {
     // Testando o mês de Janeiro inteiro para a Loja ID 264550 (se quiser filtrar) ou todas
     ExecuteJobConferencia({
-        group_id: 1, // Coloque o ID do grupo aqui se souber, ou deixe null para todas
-        dt_inicio: '2026-01-01',
-        dt_fim: '2026-01-31'
+        group_id: 3, // Coloque o ID do grupo aqui se souber, ou deixe null para todas
+        dt_inicio: '2026-02-01',
+        dt_fim: '2026-02-02'
     });
 }
