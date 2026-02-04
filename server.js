@@ -2,7 +2,8 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
-const { getLogs,log,sendWhatsappText} = require('./utils/logger');
+const { getLogs,log} = require('./utils/logger');
+const { sendWhatsappText} = require('./utils/utils');
 
 const { processItemVenda } = require('./workers/workerItemVenda');
 const { processConsolidation } = require('./workers/workerConsolidateSales');
