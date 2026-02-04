@@ -286,7 +286,7 @@ router.post('/run/financeiro', async (req, res) => {
 });
 
 // === Workers de Whatsapp ===
-router.post('run/sendWhatsapp', async (req, res) => {
+router.post('/run/send-mensage', async (req, res) => {
     const { telefone, mensagem } = req.body;
 
     if (!telefone || !mensagem) {

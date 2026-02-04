@@ -131,9 +131,9 @@ async function sendWhatsappText(telefone, mensagem) {
             { phone: telefone, message: mensagem },
             { headers: { 'Content-Type': 'application/json', 'Client-Token': process.env.ZAPI_CLIENT_TOKEN } }
         );
-        log(`📤 Texto enviado para ${telefone}`, 'WorkerReportPdfWeekly');
+        log(`📤 Texto enviado para ${telefone}`, 'sendWhatsappText');
     } catch (err) {
-        log(`❌ Erro ao enviar texto: ${err.message}`, 'WorkerReportPdfWeekly');
+        log(`❌ Erro ao enviar texto: ${err.message}`, 'sendWhatsappText');
     }
 }
 
@@ -145,9 +145,9 @@ async function sendWhatsappPdf(telefone, url) {
             { phone: telefone, document: url, fileName },
             { headers: { 'Content-Type': 'application/json', 'Client-Token': process.env.ZAPI_CLIENT_TOKEN } }
         );
-        log(`📎 PDF ${fileName} enviado para ${telefone}`, 'WorkerReportPdfWeekly');
+        log(`📎 PDF ${fileName} enviado para ${telefone}`, 'sendWhatsappPdf');
     } catch (err) {
-        log(`❌ Erro ao enviar PDF: ${err.message}`, 'WorkerReportPdfWeekly');
+        log(`❌ Erro ao enviar PDF: ${err.message}`, 'sendWhatsappPdf');
     }
 }
 
