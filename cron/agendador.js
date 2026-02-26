@@ -15,6 +15,7 @@ const jobMap = {
     WorkerNotasPendentes: require('../workers/workerNotasPendentes').WorkerNotasPendentes,
     WorkerConsolidationStock: require('../workers/WorkerConsolidationStock').WorkerConsolidationStock,
     ExecuteJobTelemetria: require('../workers/workerTelemetria').ExecuteJobTelemetria,
+    WorkerJobConferencia: require('../workers/workerPagamentos').WorkerJobConferencia,
 
     // 🔧 Job de teste
     jobTesteLog: async () => {

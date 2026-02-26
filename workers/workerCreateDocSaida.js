@@ -73,7 +73,7 @@ async function ExecuteJobDocSaida(dt_inicio, dt_fim, group_id) {
   }
 
   for (const g of grupos) {
-    const gid = g.id ?? g; // tolera {id} ou número puro
+    const gid = g.id ?? g;
 
     log(`Start: ${start.toISODate()} - End: ${end.toISODate()}`);
     log(`⏱️ Início do processamento às ${DateTime.local().toFormat('HH:mm:ss')}`, 'workerCreateDocSaida');

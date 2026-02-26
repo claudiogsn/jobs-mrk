@@ -3,7 +3,7 @@ require('dotenv').config({ path: path.resolve('../.env') });
 
 const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
-const { callMenew, loginMenew } = require('../utils/utils');
+const { callMenew, loginMenew, callPHP} = require('../utils/utils');
 const mysql = require('mysql2/promise');
 const { v4: uuidv4 } = require('uuid');
 
@@ -254,13 +254,15 @@ async function salvarFechamentoCaixa(conn, dados, lojaId, dtInicio, dtFim) {
 // WORKER PRINCIPAL
 // ==========================================
 
-async function ExecuteJobConferencia({ group_id, dt_inicio, dt_fim } = {}) {
+async function ExecuteJobConferencia({ group_id, data } = {}) {
     const groupId = parseInt(group_id);
     const hoje = DateTime.local();
-    const dataInicio = DateTime.fromISO(dt_inicio ?? hoje.minus({ days: 1 }).toISODate());
-    const dataFim = DateTime.fromISO(dt_fim ?? dataInicio.toISODate());
 
-    log(`🚀 Iniciando Worker Conferencia | Grupo: ${groupId || 'ALL'} | ${dataInicio.toISODate()} -> ${dataFim.toISODate()}`, 'workerConferencia');
+    // Pega a data informada ou usa D-1 por padrão
+    const dataAlvo = DateTime.fromISO(data ?? hoje.minus({ days: 1 }).toISODate());
+    const dtFormatada = dataAlvo.toFormat('yyyy-MM-dd');
+
+    log(`🚀 Iniciando Worker Conferencia | Grupo: ${groupId || 'ALL'} | Data: ${dtFormatada}`, 'workerConferencia');
 
     // 1. Cria o objeto de configuração separado para poder logar
     const dbConfig = {
@@ -289,8 +291,6 @@ async function ExecuteJobConferencia({ group_id, dt_inicio, dt_fim } = {}) {
         throw e; // Para o worker aqui se não conectar
     }
 
-
-
     try {
         // 1. Busca Grupos (se não passado) ou Unidades
         let unidades = [];
@@ -298,7 +298,7 @@ async function ExecuteJobConferencia({ group_id, dt_inicio, dt_fim } = {}) {
             const [rows] = await conn.execute(`
                 SELECT su.id AS system_unit_id, su.custom_code, su.name
                 FROM system_unit AS su
-                JOIN grupo_estabelecimento_rel AS rel ON rel.system_unit_id = su.id
+                         JOIN grupo_estabelecimento_rel AS rel ON rel.system_unit_id = su.id
                 WHERE rel.grupo_id = ? AND su.custom_code IS NOT NULL
             `, [groupId]);
             unidades = rows;
@@ -319,88 +319,113 @@ async function ExecuteJobConferencia({ group_id, dt_inicio, dt_fim } = {}) {
             throw new Error('Falha no login da API Menew');
         }
 
-        // 3. Loop de Datas (10 dias)
-        let blocoInicio = dataInicio;
-        while (blocoInicio <= dataFim) {
-            const blocoFim = DateTime.min(blocoInicio.plus({ days: 9 }), dataFim);
-            const dt1 = blocoInicio.toFormat('yyyy-MM-dd');
-            const dt2 = blocoFim.toFormat('yyyy-MM-dd');
+        // 3. Processamento da Data Única
+        log(`📅 Processando Data: ${dtFormatada}`, 'workerConferencia');
 
-            log(`📅 Processando Bloco: ${dt1} a ${dt2}`, 'workerConferencia');
+        for (const unidade of unidades) {
+            const lojaId = unidade.custom_code;
+            log(`🏢 Loja: ${unidade.name} (${lojaId})`, 'workerConferencia');
 
-            for (const unidade of unidades) {
-                const lojaId = unidade.custom_code;
-                log(`🏢 Loja: ${unidade.name} (${lojaId})`, 'workerConferencia');
+            // --- CHAMADA 1: MOVIMENTO CAIXA ---
+            try {
+                const respMov = await callMenew({
+                    token: authToken,
+                    requests: { jsonrpc: '2.0', method: 'movimentocaixa', params: { lojas: lojaId, dtinicio: dtFormatada, dtfim: dtFormatada }, id: '1' }
+                }, authToken);
 
-                // --- CHAMADA 1: MOVIMENTO CAIXA ---
-                try {
-                    const respMov = await callMenew({
-                        token: authToken,
-                        requests: { jsonrpc: '2.0', method: 'movimentocaixa', params: { lojas: lojaId, dtinicio: dt1, dtfim: dt2 }, id: '1' }
-                    }, authToken);
-
-                    if (respMov?.result?.length) {
-                        await salvarMovimentoCaixa(conn, respMov.result, lojaId, dt1, dt2);
-                        log(`  ✅ Movimento Caixa: ${respMov.result.length} registros`, 'workerConferencia');
-                    } else {
-                        log(`  ℹ️ Movimento Caixa: Sem dados`, 'workerConferencia');
-                    }
-                } catch (e) {
-                    log(`  ❌ Erro Movimento Caixa: ${e.message}`, 'workerConferencia');
+                if (respMov?.result?.length) {
+                    await salvarMovimentoCaixa(conn, respMov.result, lojaId, dtFormatada, dtFormatada);
+                    log(`  ✅ Movimento Caixa: ${respMov.result.length} registros`, 'workerConferencia');
+                } else {
+                    log(`  ℹ️ Movimento Caixa: Sem dados`, 'workerConferencia');
                 }
-
-                // --- CHAMADA 2: PAGAMENTOS ---
-                try {
-                    const respPag = await callMenew({
-                        token: authToken,
-                        requests: { jsonrpc: '2.0', method: 'pagamentos', params: { lojas: lojaId, dtinicio: dt1, dtfim: dt2 }, id: '1' }
-                    }, authToken);
-
-                    if (respPag?.result?.length) {
-                        await salvarPagamentos(conn, respPag.result, lojaId, dt1, dt2);
-                        log(`  ✅ Pagamentos: ${respPag.result.length} registros`, 'workerConferencia');
-                    } else {
-                        log(`  ℹ️ Pagamentos: Sem dados`, 'workerConferencia');
-                    }
-                } catch (e) {
-                    log(`  ❌ Erro Pagamentos: ${e.message}`, 'workerConferencia');
-                }
-
-                // --- CHAMADA 3: FECHAMENTO CAIXA ---
-                try {
-                    const respFech = await callMenew({
-                        token: authToken,
-                        requests: { jsonrpc: '2.0', method: 'fechamentocaixa', params: { lojas: lojaId, dtinicio: dt1, dtfim: dt2 }, id: '1' }
-                    }, authToken);
-
-                    if (respFech?.result?.length) {
-                        await salvarFechamentoCaixa(conn, respFech.result, lojaId, dt1, dt2);
-                        log(`  ✅ Fechamento Caixa: ${respFech.result.length} registros`, 'workerConferencia');
-                    } else {
-                        log(`  ℹ️ Fechamento Caixa: Sem dados`, 'workerConferencia');
-                    }
-                } catch (e) {
-                    log(`  ❌ Erro Fechamento Caixa: ${e.message}`, 'workerConferencia');
-                }
+            } catch (e) {
+                log(`  ❌ Erro Movimento Caixa: ${e.message}`, 'workerConferencia');
             }
-            blocoInicio = blocoFim.plus({ days: 1 });
+
+            // --- CHAMADA 2: PAGAMENTOS ---
+            try {
+                const respPag = await callMenew({
+                    token: authToken,
+                    requests: { jsonrpc: '2.0', method: 'pagamentos', params: { lojas: lojaId, dtinicio: dtFormatada, dtfim: dtFormatada }, id: '1' }
+                }, authToken);
+
+                if (respPag?.result?.length) {
+                    await salvarPagamentos(conn, respPag.result, lojaId, dtFormatada, dtFormatada);
+                    log(`  ✅ Pagamentos: ${respPag.result.length} registros`, 'workerConferencia');
+                } else {
+                    log(`  ℹ️ Pagamentos: Sem dados`, 'workerConferencia');
+                }
+            } catch (e) {
+                log(`  ❌ Erro Pagamentos: ${e.message}`, 'workerConferencia');
+            }
+
+            // --- CHAMADA 3: FECHAMENTO CAIXA ---
+            try {
+                const respFech = await callMenew({
+                    token: authToken,
+                    requests: { jsonrpc: '2.0', method: 'fechamentocaixa', params: { lojas: lojaId, dtinicio: dtFormatada, dtfim: dtFormatada }, id: '1' }
+                }, authToken);
+
+                if (respFech?.result?.length) {
+                    await salvarFechamentoCaixa(conn, respFech.result, lojaId, dtFormatada, dtFormatada);
+                    log(`  ✅ Fechamento Caixa: ${respFech.result.length} registros`, 'workerConferencia');
+                } else {
+                    log(`  ℹ️ Fechamento Caixa: Sem dados`, 'workerConferencia');
+                }
+            } catch (e) {
+                log(`  ❌ Erro Fechamento Caixa: ${e.message}`, 'workerConferencia');
+            }
         }
 
     } catch (err) {
         log(`🔥 Erro Fatal no Worker: ${err.message}`, 'workerConferencia');
     } finally {
-        await conn.end();
-        log(`🏁 Conexão fechada.`, 'workerConferencia');
+        if (conn) {
+            await conn.end();
+            log(`🏁 Conexão fechada.`, 'workerConferencia');
+        }
     }
 }
 
-module.exports = { ExecuteJobConferencia };
+async function WorkerJobConferencia(dt_inicio, dt_fim, group_id) {
+    // Defaults: ontem -> hoje
+    const hoje  = DateTime.now().toISODate();
+    const ontem = DateTime.now().minus({ days: 1 }).toISODate();
 
-if (require.main === module) {
-    // Testando o mês de Janeiro inteiro para a Loja ID 264550 (se quiser filtrar) ou todas
-    ExecuteJobConferencia({
-        group_id: 3, // Coloque o ID do grupo aqui se souber, ou deixe null para todas
-        dt_inicio: '2026-02-01',
-        dt_fim: '2026-02-02'
-    });
+    if (!dt_inicio || !dt_fim) {
+        dt_inicio = dt_inicio || ontem;
+        dt_fim    = dt_fim    || hoje;
+    }
+
+    let start = DateTime.fromISO(dt_inicio);
+    let end   = DateTime.fromISO(dt_fim);
+    if (end < start) [start, end] = [end, start];
+     const grupos = group_id
+        ? [{ id: Number(group_id) }]
+        : await callPHP('getGroupsToProcess', {});
+
+    if (!Array.isArray(grupos) || grupos.length === 0) {
+        log('⚠️ Nenhum grupo encontrado para processar.', 'ExecuteJobConferencia');
+        return;
+    }
+
+    for (const g of grupos) {
+        const gid = g.id ?? g; // tolera {id} ou número puro
+
+        log(`Start: ${start.toISODate()} - End: ${end.toISODate()}`);
+        log(`⏱️ Início do processamento às ${DateTime.local().toFormat('HH:mm:ss')}`, 'ExecuteJobConferencia');
+
+        for (let cursor = start; cursor <= end; cursor = cursor.plus({ days: 1 })) {
+            const data = cursor.toFormat('yyyy-MM-dd');
+            await ExecuteJobConferencia({ group_id: gid, data });
+            log(`✅ Dia ${data} processado para o grupo ${gid}`, 'ExecuteJobConferencia');
+        }
+
+        log(`✅ Grupo ${gid} finalizado às ${DateTime.local().toFormat('HH:mm:ss')}`, 'ExecuteJobConferencia');
+    }
 }
+
+module.exports = { ExecuteJobConferencia,WorkerJobConferencia };
+
+if (require.main === module) { WorkerJobConferencia()}
