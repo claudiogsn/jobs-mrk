@@ -4,6 +4,17 @@ const { DateTime } = require('luxon');
 const { callPHP, loginMenew, callMenew} = require('../utils/utils');
 const { ExecuteJobStockZig } = require('./workerStockZig');
 
+// Mapeamento das regras: lojaId (systemUnitId) -> nfNumeroC mínimo
+const minNfPorLoja = {
+    256250: 123260, // Brutus - Pituba
+    263884: 61277,  // Brutus - Alphaville
+    263491: 61515,  // Brutus - Apipema
+    257838: 133691, // Brutus - Bela Vista
+    256251: 260827, // Brutus - SSA Shopping
+    267549: 20960,  // Brutus - SSA Delivery
+    263929: 68938,  // Brutus - Vilas
+    267768: 5126    // Brutus - Vilas Delivery
+};
 
 async function processItemVenda({ group_id, dt_inicio, dt_fim } = {}) {
     const groupId = parseInt(group_id ?? process.env.GROUP_ID);
@@ -57,7 +68,25 @@ async function processItemVenda({ group_id, dt_inicio, dt_fim } = {}) {
             continue;
         }
 
-        const salesData = items.map(item => ({
+        // 🟢 APLICAÇÃO DO FILTRO AQUI ANTES DO MAP
+        const itensFiltrados = items.filter(item => {
+            const notaMinima = minNfPorLoja[systemUnitId];
+            const notaAtual = parseInt(item.__nfNumeroC);
+
+            // Se existe regra para essa loja E a nota atual for menor que a mínima, DESCARTA (retorna false)
+            if (notaMinima && !isNaN(notaAtual) && notaAtual < notaMinima) {
+                return false;
+            }
+            return true; // Mantém a venda no array
+        });
+
+        if (itensFiltrados.length === 0) {
+            log(`⚠️ Nenhum item passou no filtro de nota mínima para loja ${customCode}`, 'workerItemVenda');
+            continue;
+        }
+
+        // 🟢 Agora fazemos o map no array filtrado
+        const salesData = itensFiltrados.map(item => ({
             idItemVenda: item.idItemVenda,
             valorBruto: item.valorBruto,
             valorUnitario: item.valorUnitario,
@@ -92,7 +121,7 @@ async function processItemVenda({ group_id, dt_inicio, dt_fim } = {}) {
         });
 
         const tempoExec = ((final - inicio) / 60000).toFixed(2);
-        log(`✅ Loja ${customCode} processada com sucesso em ${tempoExec} min`, 'workerItemVenda');
+        log(`✅ Loja ${customCode} processada com sucesso em ${tempoExec} min. Enviados ${salesData.length} itens (de ${items.length} totais).`, 'workerItemVenda');
     }
 }
 
