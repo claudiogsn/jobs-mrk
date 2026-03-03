@@ -70,7 +70,7 @@ async function processItemVenda({ group_id, dt_inicio, dt_fim } = {}) {
 
         // 🟢 APLICAÇÃO DO FILTRO AQUI ANTES DO MAP
         const itensFiltrados = items.filter(item => {
-            const notaMinima = minNfPorLoja[systemUnitId];
+            const notaMinima = minNfPorLoja[customCode];
             const notaAtual = parseInt(item.__nfNumeroC);
 
             // Se existe regra para essa loja E a nota atual for menor que a mínima, DESCARTA (retorna false)
