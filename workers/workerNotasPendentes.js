@@ -1,15 +1,7 @@
 require('dotenv').config();
-const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
+const { publishToQueue, connect, QUEUES } = require('../utils/rabbitmq');
 const { callPHP, formatCurrency } = require('../utils/utils');
 const { log } = require('../utils/logger');
-
-const sqs = new SQSClient({
-    region: process.env.AWS_REGION,
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-    }
-});
 
 function formatDateBr(dateStr) {
     if (!dateStr) return '';
@@ -25,7 +17,6 @@ async function enviarNotasPendentes(contato, grupo) {
     const groupId = grupo.id;
     const grupoNome = grupo.nome;
 
-    // pega as unidades do grupo
     const unidades = await callPHP('getUnitsByGroup', { group_id: groupId });
     if (!Array.isArray(unidades) || unidades.length === 0) {
         log(`❌ Erro: retorno inesperado de getUnitsByGroup para grupo ${grupoNome}`, 'WorkerNotasPendentes');
@@ -79,18 +70,10 @@ async function enviarNotasPendentes(contato, grupo) {
     }
 
     const mensagem = `⚠️ Olá, *${nome}*!\n\n${corpoMensagem.trim()}`;
-
-    const payload = {
-        telefone,
-        mensagem
-    };
+    const payload = { telefone, mensagem };
 
     try {
-        await sqs.send(new SendMessageCommand({
-            QueueUrl: process.env.WHATSAPP_QUEUE_URL,
-            MessageBody: JSON.stringify(payload)
-        }));
-
+        await publishToQueue(QUEUES.WHATSAPP, payload);
         log(`✅ Mensagem de notas pendentes enviada para ${nome} (${telefone}) – Total pendentes: ${totalNotasPendentesGeral}`, 'WorkerNotasPendentes');
     } catch (err) {
         log(`❌ Falha ao enviar mensagem de notas pendentes para ${nome}: ${err.message}`, 'WorkerNotasPendentes');
@@ -98,8 +81,9 @@ async function enviarNotasPendentes(contato, grupo) {
 }
 
 async function WorkerNotasPendentes() {
-    const idDisparo = 17;
+    await connect();
 
+    const idDisparo = 17;
     const contatosResp = await callPHP('getContatosByDisparo', { id_disparo: idDisparo });
 
     if (!contatosResp || !contatosResp.success) {
@@ -122,7 +106,6 @@ async function WorkerNotasPendentes() {
         }
     }
 }
-
 
 module.exports = {
     enviarNotasPendentes,

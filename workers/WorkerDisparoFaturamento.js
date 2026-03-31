@@ -1,26 +1,17 @@
 require('dotenv').config();
-const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
+const { publishToQueue, connect, QUEUES } = require('../utils/rabbitmq');
 const { callPHP, formatCurrency, calcularVariacao } = require('../utils/utils');
 const { log } = require('../utils/logger');
 
-const sqs = new SQSClient({
-    region: process.env.AWS_REGION,
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-    }
-});
-
 // Função auxiliar para calcular datas se uma data específica for fornecida
 function calcularIntervalosManuais(dataString) {
-    // dataString deve ser YYYY-MM-DD (ex: 2025-12-22)
     const targetDate = new Date(dataString + 'T00:00:00');
     const pastDate = new Date(targetDate);
     pastDate.setDate(targetDate.getDate() - 7);
 
     const formatDate = (date, isEnd = false) => {
         const y = date.getFullYear();
-        const m =String(date.getMonth() + 1).padStart(2, '0');
+        const m = String(date.getMonth() + 1).padStart(2, '0');
         const d = String(date.getDate()).padStart(2, '0');
         const time = isEnd ? '23:59:59' : '00:00:00';
         return `${y}-${m}-${d} ${time}`;
@@ -34,7 +25,6 @@ function calcularIntervalosManuais(dataString) {
     };
 }
 
-// Modificamos a função para aceitar 'dataEspecifica' (opcional)
 async function enviarResumoDiario(contato, grupo, dataEspecifica = null) {
     const { nome, telefone } = contato;
     const groupId = grupo.id;
@@ -42,7 +32,6 @@ async function enviarResumoDiario(contato, grupo, dataEspecifica = null) {
 
     let intervalos;
 
-    // LÓGICA NOVA: Se vier data específica, calcula no JS. Se não, busca do PHP (padrão ontem)
     if (dataEspecifica) {
         intervalos = calcularIntervalosManuais(dataEspecifica);
     } else {
@@ -50,11 +39,8 @@ async function enviarResumoDiario(contato, grupo, dataEspecifica = null) {
     }
 
     const { dt_inicio, dt_fim, dt_inicio_anterior, dt_fim_anterior } = intervalos;
-
-    // Ajuste visual da data para a mensagem
     const dataRef = dt_inicio.split(' ')[0].split('-').reverse().join('/');
 
-    // Pega as lojas do grupo
     const unidades = await callPHP('getUnitsByGroup', { group_id: groupId });
     if (!Array.isArray(unidades)) {
         log(`❌ Erro: retorno inesperado de getUnitsByGroup para grupo ${grupoNome}`, 'enviarResumoDiario');
@@ -64,42 +50,24 @@ async function enviarResumoDiario(contato, grupo, dataEspecifica = null) {
     let corpoMensagem = `Segue os dados de faturamento do dia *${dataRef}* por loja do grupo *${grupoNome}*:\n\n━━━━━━━━━━━━━━━━━━━\n`;
 
     const total = {
-        faturamento_bruto: 0,
-        faturamento_liquido: 0,
-        descontos: 0,
-        taxa_servico: 0,
-        numero_clientes: 0,
-        ticket_medio_soma: 0,
-        lojas: 0,
-        faturamento_bruto_semanal: 0,
-        faturamento_liquido_semanal: 0,
-        descontos_semanal: 0,
-        taxa_servico_semanal: 0,
-        ticket_medio_soma_semanal: 0,
-        numero_clientes_semanal: 0,
-        numero_pedidos: 0,
-        numero_pedidos_semanal: 0,
-        pedidos_presencial: 0,
-        pedidos_delivery: 0,
-        pedidos_presencial_semanal: 0,
-        pedidos_delivery_semanal: 0
+        faturamento_bruto: 0, faturamento_liquido: 0, descontos: 0,
+        taxa_servico: 0, numero_clientes: 0, ticket_medio_soma: 0, lojas: 0,
+        faturamento_bruto_semanal: 0, faturamento_liquido_semanal: 0,
+        descontos_semanal: 0, taxa_servico_semanal: 0, ticket_medio_soma_semanal: 0,
+        numero_clientes_semanal: 0, numero_pedidos: 0, numero_pedidos_semanal: 0,
+        pedidos_presencial: 0, pedidos_delivery: 0,
+        pedidos_presencial_semanal: 0, pedidos_delivery_semanal: 0
     };
 
     for (const unidade of unidades) {
         const { custom_code, name: unitName } = unidade;
 
-        // Consulta para a data alvo
         const resumoOntem = await callPHP('generateResumoFinanceiroPorLoja', {
-            lojaid: custom_code,
-            dt_inicio,
-            dt_fim
+            lojaid: custom_code, dt_inicio, dt_fim
         });
 
-        // Consulta para a semana anterior (comparativo)
         const resumoSemanaPassada = await callPHP('generateResumoFinanceiroPorLoja', {
-            lojaid: custom_code,
-            dt_inicio: dt_inicio_anterior,
-            dt_fim: dt_fim_anterior
+            lojaid: custom_code, dt_inicio: dt_inicio_anterior, dt_fim: dt_fim_anterior
         });
 
         if (!resumoOntem || !resumoSemanaPassada) {
@@ -113,8 +81,6 @@ async function enviarResumoDiario(contato, grupo, dataEspecifica = null) {
             resumoOntem.descontos === 0 &&
             resumoOntem.numero_pedidos === 0
         ) {
-            // Log apenas informativo, não bloqueante se for envio manual
-            // log(`⚠️ Loja ${unitName} sem faturamento no período. Ignorada.`, 'enviarResumoDiario');
             continue;
         }
 
@@ -145,7 +111,6 @@ Variação de N.Pedidos Delivery: ${calcularVariacao(resumoOntem.pedidos_deliver
         total.numero_pedidos += resumoOntem.numero_pedidos;
         total.pedidos_presencial += (resumoOntem.pedidos_presencial || 0);
         total.pedidos_delivery += (resumoOntem.pedidos_delivery || 0);
-
         total.lojas++;
 
         total.faturamento_bruto_semanal += resumoSemanaPassada.faturamento_bruto;
@@ -179,24 +144,15 @@ Variação de N.Pedidos Delivery: ${calcularVariacao(resumoOntem.pedidos_deliver
 
     if (total.lojas === 0) {
         log(`🚫 Nenhuma loja com faturamento para ${nome} (${grupoNome}). Mensagem não enviada.`, 'enviarResumoDiario');
-        // Se for disparo manual, pode ser interessante avisar que não houve dados
         return false;
     }
 
-    const mensagem = `🌅 Bom dia, *${nome}!*
-${corpoMensagem.trim()}`;
+    const mensagem = `🌅 Bom dia, *${nome}!*\n${corpoMensagem.trim()}`;
 
-    const payload = {
-        telefone,
-        mensagem
-    };
+    const payload = { telefone, mensagem };
 
     try {
-        await sqs.send(new SendMessageCommand({
-            QueueUrl: process.env.WHATSAPP_QUEUE_URL,
-            MessageBody: JSON.stringify(payload)
-        }));
-
+        await publishToQueue(QUEUES.WHATSAPP, payload);
         log(`✅ Mensagem enviada para ${nome} (${telefone})`, 'enviarResumoDiario');
         return true;
     } catch (err) {
@@ -205,9 +161,9 @@ ${corpoMensagem.trim()}`;
     }
 }
 
-
 async function WorkerResumoDiario() {
-    // ... mantido igual ...
+    await connect();
+
     const contatosResp = await callPHP('getContatosByDisparo', { id_disparo: 1 });
     if (!contatosResp.success) {
         log('❌ Erro ao buscar contatos', 'WorkerFilaWhatsapp');
@@ -216,7 +172,7 @@ async function WorkerResumoDiario() {
 
     for (const contato of contatosResp.data) {
         for (const grupo of contato.grupos) {
-            await enviarResumoDiario(contato, grupo); // Sem data = usa a lógica padrão
+            await enviarResumoDiario(contato, grupo);
         }
     }
 }

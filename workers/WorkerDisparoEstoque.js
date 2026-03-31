@@ -1,21 +1,13 @@
 require('dotenv').config();
-const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
+const { publishToQueue, connect, QUEUES } = require('../utils/rabbitmq');
 const { callPHP } = require('../utils/utils');
 const { log } = require('../utils/logger');
 
-const sqs = new SQSClient({
-    region: process.env.AWS_REGION,
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-    }
-});
-
 const DESTINOS = [
-    { nome: 'Claudio', telefone: '5583999275543' }
-    ,{ nome: 'Paula', telefone: '5571991248941' }
-    ,{ nome: 'Edno', telefone: '5571992649337' }
-    ,{nome: 'Pedro', telefone: '5571992501052' }
+    { nome: 'Claudio', telefone: '5583999275543' },
+    { nome: 'Paula', telefone: '5571991248941' },
+    { nome: 'Edno', telefone: '5571992649337' },
+    { nome: 'Pedro', telefone: '5571992501052' }
 ];
 
 function calcularVariacao(atual, anterior) {
@@ -30,6 +22,8 @@ function formatCurrency(value) {
 }
 
 async function gerarFilaWhatsappCMV() {
+    await connect();
+
     const hoje = new Date();
     const ultimaSegunda = new Date(hoje);
     ultimaSegunda.setDate(ultimaSegunda.getDate() - ((hoje.getDay() + 6) % 7 + 7));
@@ -72,18 +66,8 @@ async function gerarFilaWhatsappCMV() {
     }
 
     let soma = {
-        atual: {
-            faturamento: 0,
-            cmv: 0,
-            compras: 0,
-            saidas: 0
-        },
-        anterior: {
-            faturamento: 0,
-            cmv: 0,
-            compras: 0,
-            saidas: 0
-        }
+        atual: { faturamento: 0, cmv: 0, compras: 0, saidas: 0 },
+        anterior: { faturamento: 0, cmv: 0, compras: 0, saidas: 0 }
     };
 
     for (const lojaAtual of dadosAtuais.data) {
@@ -131,11 +115,7 @@ async function gerarFilaWhatsappCMV() {
         };
 
         try {
-            await sqs.send(new SendMessageCommand({
-                QueueUrl: process.env.WHATSAPP_QUEUE_URL,
-                MessageBody: JSON.stringify(payload)
-            }));
-
+            await publishToQueue(QUEUES.WHATSAPP, payload);
             log(`✅ Mensagem CMV enviada para ${destinatario.nome}`, 'workerCMV');
         } catch (err) {
             log(`❌ Falha ao enviar CMV para ${destinatario.nome}: ${err.message}`, 'workerCMV');

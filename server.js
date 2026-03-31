@@ -93,29 +93,24 @@ router.post('/notify/transferencia', async (req, res) => {
         res.status(500).send('❌ Erro ao processar transferência.');
     }
 });
-
 router.post('/run/resumo-diario', async (req, res) => {
-    // Extrai os dados necessários para simular o contato e o grupo
-    const { nome, telefone, group_id, group_name, data } = req.body;
+    const { contato, grupo, data } = req.body;
 
-    // Validação básica
-    if (!nome || !telefone || !group_id || !group_name || !data) {
-        return res.status(400).send('❌ Parâmetros obrigatórios ausentes: nome, telefone, group_id, group_name, data (YYYY-MM-DD)');
+    if (
+        !contato?.nome ||
+        !contato?.telefone ||
+        !grupo?.id ||
+        !grupo?.nome
+    ) {
+        return res.status(400).send('❌ Parâmetros obrigatórios ausentes');
     }
 
     try {
-        // Monta os objetos que a função espera
-        const contato = { nome, telefone };
-        const grupo = { id: group_id, nome: group_name };
+        await enviarResumoDiario(contato, grupo);
 
-        // Chama a função passando a data específica
-        await enviarResumoDiario(contato, grupo, data);
-
-        // Retorna no padrão solicitado
         res.send(`✅ Worker - <strong>Resumo Diário</strong> enviado com sucesso:<br>
-                  <b>Cliente:</b> ${nome}<br>
-                  <b>Grupo:</b> ${group_name} (ID: ${group_id})<br>
-                  <b>Data Ref:</b> ${formatDateBr(data)}`);
+                  <b>Cliente:</b> ${contato.nome}<br>
+                  <b>Grupo:</b> ${grupo.nome} (ID: ${grupo.id})<br>`);
 
     } catch (error) {
         console.error(error);

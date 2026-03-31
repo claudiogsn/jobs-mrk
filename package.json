@@ -12,7 +12,7 @@
     "worker:caixa": "node workers/workerMovimentoCaixa.js"
   },
   "dependencies": {
-    "@aws-sdk/client-sqs": "^3.817.0",
+    "amqplib": "^1.0.2",
     "axios": "^1.13.2",
     "cors": "^2.8.5",
     "dayjs": "^1.11.19",

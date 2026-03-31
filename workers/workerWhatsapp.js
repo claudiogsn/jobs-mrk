@@ -1,15 +1,7 @@
 require('dotenv').config();
 const { log } = require('../utils/logger');
-const { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } = require('@aws-sdk/client-sqs');
+const { consumeFromQueue, connect, QUEUES } = require('../utils/rabbitmq');
 const axios = require('axios');
-
-const sqs = new SQSClient({
-    region: process.env.AWS_REGION,
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-    }
-});
 
 async function sendWhatsappMessage(data) {
     const { telefone, mensagem } = data;
@@ -37,49 +29,28 @@ async function sendWhatsappMessage(data) {
     }
 }
 
-async function processQueue() {
-    while (true) {
-        try {
-            const command = new ReceiveMessageCommand({
-                QueueUrl: process.env.WHATSAPP_QUEUE_URL,
-                MaxNumberOfMessages: 1,
-                WaitTimeSeconds: 10,
-                VisibilityTimeout: 300
-            });
+async function processQueueWhatsapp() {
+    await connect();
 
-            const data = await sqs.send(command);
+    log('🚀 Worker WhatsApp iniciado - aguardando mensagens...', 'workerWhatsapp');
 
-            if (!data.Messages || data.Messages.length === 0) {
-                //log('📭 Nenhuma mensagem na fila, aguardando...', 'workerWhatsapp');
-                continue;
-            }
+    await consumeFromQueue(QUEUES.WHATSAPP, async (payload) => {
+        log('📨 Processando mensagem para ' + payload.telefone, 'workerWhatsapp');
 
-            for (const message of data.Messages) {
-                const body = JSON.parse(message.Body);
-                const payload = typeof body === 'string' ? JSON.parse(body) : body;
+        const success = await sendWhatsappMessage(payload);
 
-                log('📨 Processando mensagem para ' + payload.telefone, 'workerWhatsapp');
-
-                const success = await sendWhatsappMessage(payload);
-
-                if (success) {
-                    await sqs.send(new DeleteMessageCommand({
-                        QueueUrl: process.env.WHATSAPP_QUEUE_URL,
-                        ReceiptHandle: message.ReceiptHandle
-                    }));
-                    log('🗑️ Mensagem deletada da fila com sucesso.', 'workerWhatsapp');
-                } else {
-                    log('⚠️ Envio falhou, mensagem NÃO deletada.', 'workerWhatsapp');
-                }
-            }
-        } catch (err) {
-            log('❌ Erro no processamento da fila: ' + err.message, 'workerWhatsapp');
+        if (success) {
+            log('✅ Mensagem processada com sucesso.', 'workerWhatsapp');
+        } else {
+            log('⚠️ Envio falhou, mensagem será reenfileirada.', 'workerWhatsapp');
         }
-    }
+
+        return success; // true = ACK, false = NACK (reenfileira)
+    }, { prefetch: 1 });
 }
 
-module.exports = { processQueueWhatsapp: processQueue };
+module.exports = { processQueueWhatsapp };
 
 if (require.main === module) {
-    processQueue();
+    processQueueWhatsapp();
 }
