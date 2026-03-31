@@ -5,7 +5,8 @@ const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
 const { callMenew, loginMenew, callPHP} = require('../utils/utils');
 const mysql = require('mysql2/promise');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
+const uuidv4 = () => crypto.randomUUID();
 
 // Configuração de Lote para Insert
 const CHUNK_SIZE = 500;
