@@ -5,7 +5,6 @@ const axios = require('axios');
 const { appendApiLog } = require('../utils/apiLogger');
 const mysql = require("mysql2/promise");
 
-
 function formatCurrency(value) {
     return 'R$ ' + (value || 0).toFixed(2)
         .replace('.', ',')
@@ -85,7 +84,6 @@ async function callPHP(method, data) {
     const payload = { method,token,data };
 
     if (['itemVendaPayload', 'persistSales','persistMovimentoCaixa'].includes(method)) {
-        //appendApiLog(`➡️ REQUEST: ${method} - Grande Demais - Payload não logado por segurança`);
         appendApiLog(`➡️ REQUEST: ${method} - ${JSON.stringify(payload)} - URL: ${process.env.BACKEND_URL}`);
     } else {
         appendApiLog(`➡️ REQUEST: ${method} - ${JSON.stringify(payload)} - URL: ${process.env.BACKEND_URL}`);
@@ -152,12 +150,81 @@ async function sendWhatsappPdf(telefone, url) {
 }
 
 async function getConnection() {
-    return await mysql.createConnection({
+    return mysql.createConnection({
         host: process.env.DB_HOST,
         user: process.env.DB_USER,
         password: process.env.DB_PASS,
         database: process.env.DB_NAME
     });
+}
+
+
+async function callTecnoSpeed(systemUnitId, axiosConfig) {
+    const startTime = Date.now();
+    let httpCode = null;
+    let responseBody = null;
+    let errorMessage = null;
+    let result = null;
+    let errorToThrow = null;
+
+    try {
+        // 1. Executa a chamada real para a API
+        const response = await axios(axiosConfig);
+        httpCode = response.status;
+
+        // Trata o responseBody para não estourar o limite de log caso o JSON seja colossal
+        const rawResponse = JSON.stringify(response.data);
+        responseBody = rawResponse.length > 50000 ? rawResponse.substring(0, 50000) + '... [TRUNCADO]' : rawResponse;
+
+        result = response; // Guarda o response inteiro para retornar igualzinho o axios
+    } catch (error) {
+        httpCode = error.response ? error.response.status : null;
+        responseBody = error.response ? JSON.stringify(error.response.data) : null;
+        errorMessage = error.message || 'Erro desconhecido';
+        errorToThrow = error; // Guarda o erro para relançar no final
+    }
+
+    const executionTimeMs = Date.now() - startTime;
+
+    // 2. Registra o log no banco de dados de forma silenciosa (não afeta o worker se falhar)
+    let conn = null;
+    try {
+        conn = await getConnection();
+
+        const reqBodyLog = axiosConfig.data ? JSON.stringify(axiosConfig.data) : null;
+
+        // Pega a URL limpa (endpoint) para o log
+        let endpointLog = axiosConfig.url;
+        if (axiosConfig.url.length > 255) {
+            endpointLog = axiosConfig.url.substring(0, 250) + '...';
+        }
+
+        await conn.execute(`
+            INSERT INTO pluggy_integration_logs
+            (system_unit_id, endpoint, method, request_body, response_body, http_code, error_message, execution_time_ms)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            systemUnitId,
+            endpointLog,
+            (axiosConfig.method || 'GET').toUpperCase(),
+            reqBodyLog,
+            responseBody,
+            httpCode,
+            errorMessage,
+            executionTimeMs
+        ]);
+    } catch (logError) {
+        console.error(`❌ Erro ao salvar log de integração da Tecnospeed:`, logError.message);
+    } finally {
+        if (conn) await conn.end(); // Sempre garante que a conexão será fechada
+    }
+
+    // 3. Devolve a resposta (ou o erro) como se fosse o axios original
+    if (errorToThrow) {
+        throw errorToThrow;
+    }
+
+    return result;
 }
 
 module.exports = {
@@ -172,6 +239,6 @@ module.exports = {
     sendWhatsappPdf,
     getConnection,
     calcularVariacaoReverse,
-    calcularVariacaoSemBola
-    
+    calcularVariacaoSemBola,
+    callTecnoSpeed // <--- Exportando a nova função
 };

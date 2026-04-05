@@ -22,6 +22,8 @@ const { enviarResumoMensal, WorkerReportPdfMonthly } = require('./workers/Worker
 const {enviarNotasPendentes, WorkerNotasPendentes} = require('./workers/workerNotasPendentes');
 const { enviarAuditoriaCop } = require('./workers/workerCopReport');
 const { ProcessJobTransferNotify } = require('./workers/workerTransferNotify');
+const { ExecuteJobSolicitacao } = require('./workers/workerSolicitacaoExtrato');
+const { ExecuteJobImportacao } = require('./workers/workerImportacaoExtrato');
 
 
 
@@ -40,6 +42,8 @@ const liveLogs = [];
 const MAX_LOGS = 1000;
 const originalLog = console.log;
 const REPORTS_DIR = path.join(__dirname, 'workers', 'reports');
+
+app.use(express.json());
 
 
 const formatDate = (dataISO) => {
@@ -73,6 +77,68 @@ console.log = (...args) => {
     if (liveLogs.length > MAX_LOGS) liveLogs.shift();
     originalLog(msg);
 };
+
+app.post('/api/extratos/sincronizar', async (req, res) => {
+    console.log(JSON.stringify(req.body));
+    try {
+
+        const { system_unit_id, dt_inicio, dt_fim, user_id } = req.body;
+
+        if (!system_unit_id) {
+            return res.status(400).json({
+                success: false,
+                message: "O ID da unidade (system_unit_id) é obrigatório."
+            });
+        }
+
+
+        const payloadWorker = {
+            system_unit_id: Number(system_unit_id),
+            dt_inicio: dt_inicio,
+            dt_fim: dt_fim,
+            user_id: user_id
+        };
+
+
+        ExecuteJobSolicitacao(payloadWorker)
+            .then(() => console.log(`Job Manual de Extrato iniciado com sucesso para Unidade: ${system_unit_id}`))
+            .catch(err => console.error(`Erro no Job Manual de Extrato:`, err));
+
+        return res.status(200).json({
+            success: true,
+            message: "Sincronização de extratos solicitada! O processo está rodando em segundo plano."
+        });
+
+    } catch (error) {
+        console.error("Erro ao chamar a rota de sincronização:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Erro interno no servidor ao tentar iniciar a sincronização."
+        });
+    }
+});
+
+
+app.post('/api/extratos/processar-pendentes', async (req, res) => {
+    try {
+
+        ExecuteJobImportacao()
+            .then(() => console.log(`Job Manual de Importação finalizado com sucesso.`))
+            .catch(err => console.error(`Erro no Job Manual de Importação:`, err));
+
+        return res.status(200).json({
+            success: true,
+            message: "Verificação de extratos pendentes iniciada em background."
+        });
+
+    } catch (error) {
+        console.error("Erro ao chamar a rota de processamento:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Erro interno no servidor ao tentar iniciar o processamento."
+        });
+    }
+});
 
 // === Workers ===
 router.post('/notify/transferencia', async (req, res) => {
