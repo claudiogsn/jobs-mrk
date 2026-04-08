@@ -78,7 +78,7 @@ console.log = (...args) => {
     originalLog(msg);
 };
 
-app.post('/api/extratos/sincronizar', async (req, res) => {
+router.post('/api/extratos/sincronizar', async (req, res) => {
     console.log(JSON.stringify(req.body));
     try {
 
@@ -119,7 +119,7 @@ app.post('/api/extratos/sincronizar', async (req, res) => {
 });
 
 
-app.post('/api/extratos/processar-pendentes', async (req, res) => {
+router.post('/api/extratos/processar-pendentes', async (req, res) => {
     try {
 
         ExecuteJobImportacao()
