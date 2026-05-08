@@ -160,7 +160,7 @@ router.post('/notify/transferencia', async (req, res) => {
     }
 });
 router.post('/run/resumo-diario', async (req, res) => {
-    const { contato, grupo, data } = req.body;
+    const { contato, grupo, data, dt_inicio, dt_fim } = req.body;
 
     if (
         !contato?.nome ||
@@ -171,17 +171,72 @@ router.post('/run/resumo-diario', async (req, res) => {
         return res.status(400).send('❌ Parâmetros obrigatórios ausentes');
     }
 
-    try {
-        await enviarResumoDiario(contato, grupo);
+    // Monta o array de datas a processar
+    let datasParaEnviar = [];
 
-        res.send(`✅ Worker - <strong>Resumo Diário</strong> enviado com sucesso:<br>
-                  <b>Cliente:</b> ${contato.nome}<br>
-                  <b>Grupo:</b> ${grupo.nome} (ID: ${grupo.id})<br>`);
+    if (dt_inicio && dt_fim) {
+        // Modo intervalo: gera todas as datas entre início e fim (inclusive)
+        const inicio = new Date(dt_inicio + 'T00:00:00');
+        const fim = new Date(dt_fim + 'T00:00:00');
 
-    } catch (error) {
-        console.error(error);
-        res.status(500).send(`❌ Erro ao executar worker: ${error.message}`);
+        if (isNaN(inicio.getTime()) || isNaN(fim.getTime())) {
+            return res.status(400).send('❌ Datas inválidas. Use o formato YYYY-MM-DD');
+        }
+
+        if (inicio > fim) {
+            return res.status(400).send('❌ dt_inicio deve ser menor ou igual a dt_fim');
+        }
+
+        // Limite de segurança para não disparar centenas de mensagens por engano
+        const diffDias = Math.ceil((fim - inicio) / (1000 * 60 * 60 * 24)) + 1;
+        if (diffDias > 31) {
+            return res.status(400).send(`❌ Intervalo muito grande (${diffDias} dias). Máximo permitido: 31 dias`);
+        }
+
+        const cursor = new Date(inicio);
+        while (cursor <= fim) {
+            const y = cursor.getFullYear();
+            const m = String(cursor.getMonth() + 1).padStart(2, '0');
+            const d = String(cursor.getDate()).padStart(2, '0');
+            datasParaEnviar.push(`${y}-${m}-${d}`);
+            cursor.setDate(cursor.getDate() + 1);
+        }
+    } else if (data) {
+        // Modo data única (compatibilidade com o uso atual)
+        datasParaEnviar.push(data);
+    } else {
+        // Sem data → usa o comportamento padrão (ontem, via getIntervalosDiarios)
+        datasParaEnviar.push(null);
     }
+
+    // Dispara um resumo para cada data
+    const resultados = [];
+    for (const dataDia of datasParaEnviar) {
+        try {
+            const enviado = await enviarResumoDiario(contato, grupo, dataDia);
+            resultados.push({
+                data: dataDia || 'padrão (ontem)',
+                status: enviado ? 'enviado' : 'sem dados',
+            });
+        } catch (error) {
+            console.error(`Erro no dia ${dataDia}:`, error);
+            resultados.push({
+                data: dataDia || 'padrão (ontem)',
+                status: 'erro',
+                erro: error.message,
+            });
+        }
+    }
+
+    const linhas = resultados
+        .map(r => `• <b>${r.data}</b>: ${r.status}${r.erro ? ` (${r.erro})` : ''}`)
+        .join('<br>');
+
+    res.send(`✅ Worker - <strong>Resumo Diário</strong> processado:<br>
+              <b>Cliente:</b> ${contato.nome}<br>
+              <b>Grupo:</b> ${grupo.nome} (ID: ${grupo.id})<br>
+              <b>Dias processados:</b> ${resultados.length}<br><br>
+              ${linhas}`);
 });
 
 router.post('/run/movimentocaixa', async (req, res) => {
@@ -388,21 +443,21 @@ router.post('/run/wpp-mensal', async (req, res) => {
     }
 });
 
-router.post('/run/resumo-diario', async (req, res) => {
-    const { contato, grupo } = req.body;
-
-    if (!contato?.nome || !contato?.telefone || !grupo?.id || !grupo?.nome) {
-        return res.status(400).send('❌ Parâmetros obrigatórios: contato {nome, telefone}, grupo {id, nome}');
-    }
-
-    try {
-        await enviarResumoDiario(contato, grupo);
-        res.send(`✅ Resumo enviado para ${contato.nome} / Grupo ${grupo.nome}`);
-    } catch (err) {
-        log(`❌ Erro ao enviar resumo manual: ${err.message}`, 'ExpressServer');
-        res.status(500).send('❌ Erro ao enviar resumo.');
-    }
-});
+// router.post('/run/resumo-diario', async (req, res) => {
+//     const { contato, grupo } = req.body;
+//
+//     if (!contato?.nome || !contato?.telefone || !grupo?.id || !grupo?.nome) {
+//         return res.status(400).send('❌ Parâmetros obrigatórios: contato {nome, telefone}, grupo {id, nome}');
+//     }
+//
+//     try {
+//         await enviarResumoDiario(contato, grupo);
+//         res.send(`✅ Resumo enviado para ${contato.nome} / Grupo ${grupo.nome}`);
+//     } catch (err) {
+//         log(`❌ Erro ao enviar resumo manual: ${err.message}`, 'ExpressServer');
+//         res.status(500).send('❌ Erro ao enviar resumo.');
+//     }
+// });
 
 router.post('/run/notas-pendentes', async (req, res) => {
     const { contato, grupo } = req.body;
