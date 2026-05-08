@@ -37,9 +37,20 @@ async function ProcessJobStockZig(group_id, data) {
 
         const agrupados = {};
 
+        // NOVO: Objeto para guardar os SKUs que falharam no mapeamento
+        const skusNaoMapeados = {};
+
         for (const item of saidas) {
             const sku = item.productSku;
-            if (!sku || !mapaProdutos[sku]) continue;
+
+            // Verifica se o produto não tem SKU ou se o SKU não está mapeado no Portal MRK
+            if (!sku || !mapaProdutos[sku]) {
+                if (sku && !skusNaoMapeados[sku]) {
+                    // Guarda o SKU e o nome (ajuste 'productName' se a API da Zig retornar com outro nome)
+                    skusNaoMapeados[sku] = item.productName || 'Sem nome na Zig';
+                }
+                continue;
+            }
 
             const qtd = parseInt(item.count ?? 0);
             const valorUnit = parseFloat(item.unitValue ?? 0) / 100;
@@ -75,6 +86,21 @@ async function ProcessJobStockZig(group_id, data) {
         for (const registro of inserts) {
             const res = await callPHP('upsertBiSalesZig', registro);
             log(`📦 Produto ${registro.cod_material} - Loja ${lojaId} em ${data}: ${res?.message || 'registro inserido/atualizado'}`, 'workerStockZig');
+        }
+
+        const listaNaoMapeados = Object.keys(skusNaoMapeados);
+        if (listaNaoMapeados.length > 0) {
+            const alertasPayload = listaNaoMapeados.map(sku => ({
+                sku: sku,
+                nome: skusNaoMapeados[sku]
+            }));
+
+            await callPHP('registerZigAlerts', {
+                system_unit_id: system_unit_id,
+                alertas: alertasPayload
+            });
+
+            log(`⚠️ Gerados ${listaNaoMapeados.length} alertas de produtos não mapeados para a loja ${lojaId}`, 'workerStockZig');
         }
     }
 }

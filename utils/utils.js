@@ -167,36 +167,41 @@ async function callTecnoSpeed(systemUnitId, axiosConfig) {
     let result = null;
     let errorToThrow = null;
 
+    const finalConfig = {
+        ...axiosConfig,
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            ...axiosConfig.headers,
+        }
+    };
+
     try {
         // 1. Executa a chamada real para a API
-        const response = await axios(axiosConfig);
+        const response = await axios(finalConfig);
         httpCode = response.status;
 
-        // Trata o responseBody para não estourar o limite de log caso o JSON seja colossal
         const rawResponse = JSON.stringify(response.data);
         responseBody = rawResponse.length > 50000 ? rawResponse.substring(0, 50000) + '... [TRUNCADO]' : rawResponse;
 
-        result = response; // Guarda o response inteiro para retornar igualzinho o axios
+        result = response;
     } catch (error) {
         httpCode = error.response ? error.response.status : null;
         responseBody = error.response ? JSON.stringify(error.response.data) : null;
         errorMessage = error.message || 'Erro desconhecido';
-        errorToThrow = error; // Guarda o erro para relançar no final
+        errorToThrow = error;
     }
 
     const executionTimeMs = Date.now() - startTime;
 
-    // 2. Registra o log no banco de dados de forma silenciosa (não afeta o worker se falhar)
     let conn = null;
     try {
         conn = await getConnection();
 
-        const reqBodyLog = axiosConfig.data ? JSON.stringify(axiosConfig.data) : null;
+        const reqBodyLog = finalConfig.data ? JSON.stringify(finalConfig.data) : null;
 
-        // Pega a URL limpa (endpoint) para o log
-        let endpointLog = axiosConfig.url;
-        if (axiosConfig.url.length > 255) {
-            endpointLog = axiosConfig.url.substring(0, 250) + '...';
+        let endpointLog = finalConfig.url;
+        if (finalConfig.url.length > 255) {
+            endpointLog = finalConfig.url.substring(0, 250) + '...';
         }
 
         await conn.execute(`
@@ -206,7 +211,7 @@ async function callTecnoSpeed(systemUnitId, axiosConfig) {
         `, [
             systemUnitId,
             endpointLog,
-            (axiosConfig.method || 'GET').toUpperCase(),
+            (finalConfig.method || 'GET').toUpperCase(),
             reqBodyLog,
             responseBody,
             httpCode,
@@ -216,10 +221,9 @@ async function callTecnoSpeed(systemUnitId, axiosConfig) {
     } catch (logError) {
         console.error(`❌ Erro ao salvar log de integração da Tecnospeed:`, logError.message);
     } finally {
-        if (conn) await conn.end(); // Sempre garante que a conexão será fechada
+        if (conn) await conn.end();
     }
 
-    // 3. Devolve a resposta (ou o erro) como se fosse o axios original
     if (errorToThrow) {
         throw errorToThrow;
     }
