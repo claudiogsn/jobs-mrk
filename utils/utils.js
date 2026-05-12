@@ -44,10 +44,10 @@ async function callMenew(methodPayload, token) {
                 'Authorization': `Bearer ${token}`
             }
         });
-        appendApiLog(`✅ Menew call (${methodPayload?.requests?.method}): sucesso`);
+        appendApiLog('menew', `✅ Menew call (${methodPayload?.requests?.method}): sucesso`);
         return res.data;
     } catch (err) {
-        appendApiLog(`❌ ERROR (${methodPayload?.requests?.method}): ${JSON.stringify(err.response?.data || err.message)}`);
+        appendApiLog('menew', `❌ ERROR (${methodPayload?.requests?.method}): ${JSON.stringify(err.response?.data || err.message)}`);
         return null;
     }
 }
@@ -71,31 +71,27 @@ async function loginMenew() {
             headers: { 'Content-Type': 'application/json' }
         });
 
-        appendApiLog(`✅ Login Menew: sucesso - token recebido`);
+        appendApiLog('menew', `✅ Login Menew: sucesso - token recebido`);
         return response.data?.result || null;
     } catch (err) {
-        appendApiLog(`❌ Erro ao fazer login na Menew: ${JSON.stringify(err.response?.data || err.message)}`);
+        appendApiLog('menew', `❌ Erro ao fazer login na Menew: ${JSON.stringify(err.response?.data || err.message)}`);
         return null;
     }
 }
 
 async function callPHP(method, data) {
     const token = process.env.MRK_TOKEN;
-    const payload = { method,token,data };
+    const payload = { method, token, data };
 
-    if (['itemVendaPayload', 'persistSales','persistMovimentoCaixa'].includes(method)) {
-        appendApiLog(`➡️ REQUEST: ${method} - ${JSON.stringify(payload)} - URL: ${process.env.BACKEND_URL}`);
-    } else {
-        appendApiLog(`➡️ REQUEST: ${method} - ${JSON.stringify(payload)} - URL: ${process.env.BACKEND_URL}`);
-    }
+    appendApiLog('php_backend', `➡️ REQUEST: ${method} - ${JSON.stringify(payload)} - URL: ${process.env.BACKEND_URL}`);
 
     try {
         const response = await axios.post(process.env.BACKEND_URL, payload);
-        appendApiLog(`✅ RESPONSE (${method}): ${JSON.stringify(response.data)} - URL: ${process.env.BACKEND_URL}`);
+        appendApiLog('php_backend', `✅ RESPONSE (${method}): ${JSON.stringify(response.data)} - URL: ${process.env.BACKEND_URL}`);
         return response.data;
     } catch (error) {
         const errorContent = error.response?.data || error.message || 'Erro desconhecido';
-        appendApiLog(`❌ ERROR (${method}): ${JSON.stringify(errorContent)} - URL: ${process.env.BACKEND_URL}`);
+        appendApiLog('php_backend', `❌ ERROR (${method}): ${JSON.stringify(errorContent)} - URL: ${process.env.BACKEND_URL}`);
         return null;
     }
 }
@@ -103,7 +99,7 @@ async function callPHP(method, data) {
 async function getZig(endpoint, lojaId, dtinicio, dtfim, tokenZig) {
     const url = `${process.env.ZIG_URL_INTEGRATION}/${endpoint}?dtinicio=${dtinicio}&dtfim=${dtfim}&loja=${lojaId}`;
 
-    appendApiLog(`➡️ REQ Zig [${lojaId}] [${endpoint}]: ${url}`);
+    appendApiLog('zig', `➡️ REQ Zig [${lojaId}] [${endpoint}]: ${url}`);
 
     try {
         const res = await axios.get(url, {
@@ -113,11 +109,11 @@ async function getZig(endpoint, lojaId, dtinicio, dtfim, tokenZig) {
         });
 
         const logBody = JSON.stringify(res.data);
-        appendApiLog(`✅ RES Zig [${lojaId}] [${endpoint}]: ${logBody.length > 1000 ? logBody.substring(0, 1000) + '... [truncated]' : logBody}`);
+        appendApiLog('zig', `✅ RES Zig [${lojaId}] [${endpoint}]: ${logBody.length > 1000 ? logBody.substring(0, 1000) + '... [truncated]' : logBody}`);
         return res.data || [];
     } catch (err) {
         const errorData = err.response?.data || err.message || 'Erro desconhecido';
-        appendApiLog(`❌ ERROR Zig [${lojaId}] [${endpoint}]: ${JSON.stringify(errorData)}`);
+        appendApiLog('zig', `❌ ERROR Zig [${lojaId}] [${endpoint}]: ${JSON.stringify(errorData)}`);
         return [];
     }
 }
@@ -158,7 +154,6 @@ async function getConnection() {
     });
 }
 
-
 async function callTecnoSpeed(systemUnitId, axiosConfig) {
     const startTime = Date.now();
     let httpCode = null;
@@ -175,6 +170,10 @@ async function callTecnoSpeed(systemUnitId, axiosConfig) {
         }
     };
 
+    // LOG DE REQUEST (NOVO - Arquivo)
+    const method = (finalConfig.method || 'GET').toUpperCase();
+    appendApiLog('tecnospeed', `➡️ REQUEST: ${method} - ${JSON.stringify(finalConfig.data || {})} - URL: ${finalConfig.url}`);
+
     try {
         // 1. Executa a chamada real para a API
         const response = await axios(finalConfig);
@@ -184,15 +183,23 @@ async function callTecnoSpeed(systemUnitId, axiosConfig) {
         responseBody = rawResponse.length > 50000 ? rawResponse.substring(0, 50000) + '... [TRUNCADO]' : rawResponse;
 
         result = response;
+
+        // LOG DE SUCESSO (NOVO - Arquivo)
+        appendApiLog('tecnospeed', `✅ RESPONSE HTTP ${httpCode} - URL: ${finalConfig.url} - BODY: ${rawResponse.substring(0, 1000)}`);
+
     } catch (error) {
         httpCode = error.response ? error.response.status : null;
         responseBody = error.response ? JSON.stringify(error.response.data) : null;
         errorMessage = error.message || 'Erro desconhecido';
         errorToThrow = error;
+
+        // LOG DE ERRO (NOVO - Arquivo)
+        appendApiLog('tecnospeed', `❌ ERROR HTTP ${httpCode} - ${errorMessage} - DETAILS: ${responseBody} - URL: ${finalConfig.url}`);
     }
 
     const executionTimeMs = Date.now() - startTime;
 
+    // Lógica de salvar no Banco de Dados mantida intacta
     let conn = null;
     try {
         conn = await getConnection();
@@ -211,7 +218,7 @@ async function callTecnoSpeed(systemUnitId, axiosConfig) {
         `, [
             systemUnitId,
             endpointLog,
-            (finalConfig.method || 'GET').toUpperCase(),
+            method,
             reqBodyLog,
             responseBody,
             httpCode,
@@ -219,7 +226,7 @@ async function callTecnoSpeed(systemUnitId, axiosConfig) {
             executionTimeMs
         ]);
     } catch (logError) {
-        console.error(`❌ Erro ao salvar log de integração da Tecnospeed:`, logError.message);
+        console.error(`❌ Erro ao salvar log de integração da Tecnospeed no BD:`, logError.message);
     } finally {
         if (conn) await conn.end();
     }
@@ -244,5 +251,5 @@ module.exports = {
     getConnection,
     calcularVariacaoReverse,
     calcularVariacaoSemBola,
-    callTecnoSpeed // <--- Exportando a nova função
+    callTecnoSpeed
 };
