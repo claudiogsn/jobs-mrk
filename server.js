@@ -66,6 +66,7 @@ router.get('/logo.png', (req, res) => {
 
 router.use('/reports', express.static(REPORTS_DIR));
 
+
 console.log = (...args) => {
     const timestamp = new Date().toLocaleString('pt-BR', {
         timeZone: 'America/Fortaleza',
@@ -77,6 +78,48 @@ console.log = (...args) => {
     if (liveLogs.length > MAX_LOGS) liveLogs.shift();
     originalLog(msg);
 };
+
+// === API Explorer Dinâmico ===
+router.get('/api/explorer-data', (req, res) => {
+    try {
+        // Lê o próprio arquivo server.js
+        const content = fs.readFileSync(__filename, 'utf8');
+        const routes = [];
+
+        // Regex para encontrar router.post ou router.get
+        const routeRegex = /router\.(post|get)\(\s*['"]([^'"]+)['"]/g;
+        let match;
+
+        while ((match = routeRegex.exec(content)) !== null) {
+            const method = match[1].toUpperCase();
+            const endpoint = match[2];
+
+            // Pega um pedaço do código logo após a rota para analisar o body
+            const chunk = content.slice(match.index, match.index + 300);
+            let params = [];
+
+            // Tenta encontrar a desestruturação do req.body (ex: const { param1, param2 } = req.body)
+            const bodyMatch = chunk.match(/const\s+\{([^}]+)\}\s*=\s*req\.body/);
+            if (bodyMatch) {
+                params = bodyMatch[1]
+                    .split(',')
+                    .map(p => p.trim().split('=')[0].trim()) // Limpa espaços e valores default
+                    .filter(p => p && !p.includes('\n'));
+            }
+
+            routes.push({ id: Math.random().toString(36).substring(7), method, endpoint, params });
+        }
+
+        res.json(routes);
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao ler as rotas: ' + error.message });
+    }
+});
+
+// Rota para renderizar a página do dicionário
+router.get('/explorer', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views/explorer.html'));
+});
 
 router.post('/api/extratos/sincronizar', async (req, res) => {
     console.log(JSON.stringify(req.body));
