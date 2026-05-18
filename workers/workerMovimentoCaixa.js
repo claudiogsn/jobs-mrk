@@ -5,6 +5,8 @@ const { DateTime } = require('luxon');
 const { callPHP, callMenew, loginMenew } = require('../utils/utils');
 const { processJobCaixaZig } = require('./workerBillingZig');
 
+// 1. NOVO: Importando o worker de pagamentos que você criou!
+const { WorkerJobConferencia } = require('./workerPagamentos');
 
 function extrairNumControle(operacaoId) {
     if (!operacaoId || typeof operacaoId !== 'string') return null;
@@ -55,106 +57,132 @@ async function processMovimentoCaixa({ group_id, dt_inicio, dt_fim } = {}) {
         log(`📆 Processando período de ${dtinicio} até ${dtfim}`, 'workerMovimentoCaixa');
 
         for (const unidade of unidades) {
-            const customCode = unidade.lojaId;
-            const systemUnitId = unidade.system_unit_id;
+            // 2. NOVO: try/catch DENTRO do loop. Se uma loja quebrar, a próxima continua!
+            try {
+                const customCode = unidade.lojaId;
+                const systemUnitId = unidade.system_unit_id;
+                const nomeLoja = unidade.name || 'Desconhecida';
 
-            if (!customCode || !systemUnitId) {
-                log(`⚠️ Unidade com dados inválidos: ${JSON.stringify(unidade)}`, 'workerMovimentoCaixa');
-                continue;
-            }
-
-            const inicio = Date.now();
-            log(`🔄 Iniciando processamento para loja: ${customCode}`, 'workerMovimentoCaixa');
-
-            const payload = {
-                token: authToken,
-                requests: {
-                    jsonrpc: '2.0',
-                    method: 'movimentocaixa',
-                    params: {
-                        lojas: customCode,
-                        dtinicio,
-                        dtfim
-                    },
-                    id: '1'
+                if (!customCode || !systemUnitId) {
+                    log(`⚠️ [Loja Ignorada] Dados inválidos: ${JSON.stringify(unidade)}`, 'workerMovimentoCaixa');
+                    continue;
                 }
-            };
 
-            const response = await callMenew(payload, authToken);
-            const movimentos = response?.result;
+                const inicio = Date.now();
+                log(`🔄 [Loja ${customCode} - ${nomeLoja}] Iniciando busca de movimentos...`, 'workerMovimentoCaixa');
 
-            if (!Array.isArray(movimentos) || movimentos.length === 0) {
-                log(`⚠️ Nenhum movimento encontrado para loja ${customCode}`, 'workerMovimentoCaixa');
-                continue;
+                const payload = {
+                    token: authToken,
+                    requests: {
+                        jsonrpc: '2.0',
+                        method: 'movimentocaixa',
+                        params: {
+                            lojas: customCode,
+                            dtinicio,
+                            dtfim
+                        },
+                        id: '1'
+                    }
+                };
+
+                const response = await callMenew(payload, authToken);
+                const movimentos = response?.result;
+
+                if (!Array.isArray(movimentos) || movimentos.length === 0) {
+                    log(`⚠️ [Loja ${customCode} - ${nomeLoja}] Nenhum movimento encontrado neste período.`, 'workerMovimentoCaixa');
+                    continue;
+                }
+
+                log(`📡 [Loja ${customCode} - ${nomeLoja}] ${movimentos.length} movimentos encontrados na Menew. Mapeando dados...`, 'workerMovimentoCaixa');
+
+                const movimentoData = movimentos.map(mov => ({
+                    id: mov.idMovimentoCaixa,
+                    num_controle: extrairNumControle(mov.operacaoId),
+                    redeId: mov.redeId,
+                    rede: mov.rede,
+                    lojaId: mov.lojaId,
+                    loja: mov.loja,
+                    modoVenda: mov.modoVenda,
+                    idModoVenda: mov.idModoVenda,
+                    hora: mov.hora,
+                    idAtendente: mov.idAtendente,
+                    codAtendente: mov.codAtendente,
+                    nomeAtendente: mov.nomeAtendente,
+                    vlDesconto: mov.vlDesconto,
+                    vlAcrescimo: mov.vlAcrescimo,
+                    vlTotalReceber: mov.vlTotalReceber,
+                    vlTotalRecebido: mov.vlTotalRecebido,
+                    vlServicoRecebido: mov.vlServicoRecebido,
+                    vlTrocoFormasPagto: mov.vlTrocoFormasPagto,
+                    vlRepique: mov.vlRepique,
+                    vlTaxaEntrega: mov.vlTaxaEntrega,
+                    numPessoas: mov.numPessoas,
+                    operacaoId: mov.operacaoId,
+                    maquinaId: mov.maquinaId,
+                    nomeMaquina: mov.nomeMaquina,
+                    maquinaCod: mov.maquinaCod,
+                    maquinaPortaFiscal: mov.maquinaPortaFiscal,
+                    periodoId: mov.periodoId,
+                    periodoCod: mov.periodoCod,
+                    periodoNome: mov.periodoNome,
+                    cancelado: typeof mov.cancelado === 'boolean'
+                        ? mov.cancelado ? 1 : 0
+                        : (mov.cancelado === 1 ? 1 : 0),
+                    modoVenda2: mov.modoVenda2,
+                    dataAbertura: ajustarHorarioMenew(mov.dataAbertura),
+                    dataFechamento: ajustarHorarioMenew(mov.dataFechamento),
+                    dataContabil: ajustarHorarioMenew(mov.dataContabil, 'date'),
+                    meiosPagamento: mov.meiosPagamento
+                        ? adicionarSufixoSequencial(mov.meiosPagamento)
+                        : [],
+                    consumidores: mov.consumidores
+                }));
+
+                log(`💾 [Loja ${customCode} - ${nomeLoja}] Persistindo no backend PHP...`, 'workerMovimentoCaixa');
+                await callPHP('persistMovimentoCaixa', movimentoData);
+
+                const safeDate = (ts) => {
+                    const dt = DateTime.fromMillis(ts);
+                    return dt.isValid ? dt.toFormat('yyyy-MM-dd HH:mm:ss') : null;
+                };
+
+                const final = Date.now();
+                await callPHP('registerJobExecution', {
+                    nome_job: 'movimento-caixa-js',
+                    system_unit_id: systemUnitId,
+                    custom_code: customCode,
+                    inicio: safeDate(inicio),
+                    final: safeDate(Date.now())
+                });
+
+                const tempoExec = ((final - inicio) / 60000).toFixed(2);
+                log(`✅ [Loja ${customCode} - ${nomeLoja}] Processada com sucesso em ${tempoExec} min`, 'workerMovimentoCaixa');
+
+            } catch (erroUnidade) {
+                // Se der erro de parsing ou timeout em UMA loja, ele cai aqui, loga o erro, e vai pra próxima!
+                log(`❌ [Loja ${unidade.lojaId}] Falha ao processar unidade: ${erroUnidade.message}`, 'workerMovimentoCaixa');
             }
-
-            const movimentoData = movimentos.map(mov => ({
-                id: mov.idMovimentoCaixa,
-                num_controle: extrairNumControle(mov.operacaoId),
-                redeId: mov.redeId,
-                rede: mov.rede,
-                lojaId: mov.lojaId,
-                loja: mov.loja,
-                modoVenda: mov.modoVenda,
-                idModoVenda: mov.idModoVenda,
-                hora: mov.hora,
-                idAtendente: mov.idAtendente,
-                codAtendente: mov.codAtendente,
-                nomeAtendente: mov.nomeAtendente,
-                vlDesconto: mov.vlDesconto,
-                vlAcrescimo: mov.vlAcrescimo,
-                vlTotalReceber: mov.vlTotalReceber,
-                vlTotalRecebido: mov.vlTotalRecebido,
-                vlServicoRecebido: mov.vlServicoRecebido,
-                vlTrocoFormasPagto: mov.vlTrocoFormasPagto,
-                vlRepique: mov.vlRepique,
-                vlTaxaEntrega: mov.vlTaxaEntrega,
-                numPessoas: mov.numPessoas,
-                operacaoId: mov.operacaoId,
-                maquinaId: mov.maquinaId,
-                nomeMaquina: mov.nomeMaquina,
-                maquinaCod: mov.maquinaCod,
-                maquinaPortaFiscal: mov.maquinaPortaFiscal,
-                periodoId: mov.periodoId,
-                periodoCod: mov.periodoCod,
-                periodoNome: mov.periodoNome,
-                cancelado: typeof mov.cancelado === 'boolean'
-                    ? mov.cancelado ? 1 : 0
-                    : (mov.cancelado === 1 ? 1 : 0),
-                modoVenda2: mov.modoVenda2,
-                dataAbertura: ajustarHorarioMenew(mov.dataAbertura),
-                dataFechamento: ajustarHorarioMenew(mov.dataFechamento),
-                dataContabil: ajustarHorarioMenew(mov.dataContabil, 'date'),
-                meiosPagamento: mov.meiosPagamento
-                    ? adicionarSufixoSequencial(mov.meiosPagamento)
-                    : [],
-                consumidores: mov.consumidores
-            }));
-
-            await callPHP('persistMovimentoCaixa', movimentoData);
-
-            const safeDate = (ts) => {
-                const dt = DateTime.fromMillis(ts);
-                return dt.isValid ? dt.toFormat('yyyy-MM-dd HH:mm:ss') : null;
-            };
-
-            const final = Date.now();
-            await callPHP('registerJobExecution', {
-                nome_job: 'movimento-caixa-js',
-                system_unit_id: systemUnitId,
-                custom_code: customCode,
-                inicio: safeDate(inicio),
-                final: safeDate(Date.now())
-            });
-
-            const tempoExec = ((final - inicio) / 60000).toFixed(2);
-            log(`✅ Loja ${customCode} processada com sucesso em ${tempoExec} min`, 'workerMovimentoCaixa');
         }
 
         blocoInicio = blocoFim.plus({ days: 1 });
     }
 
-    await processJobCaixaZig(group_id, dt_inicio, dt_fim);
+    // 3. NOVO: Chamando a atualização de pagamentos antes da Zig
+    log(`🚀 Chamando Job de Conferência (Pagamentos) para o Grupo ${groupId || 'ALL'}...`, 'workerMovimentoCaixa');
+    try {
+        await WorkerJobConferencia(dt_inicio, dt_fim, group_id);
+        log(`✅ Job de Conferência concluído.`, 'workerMovimentoCaixa');
+    } catch (e) {
+        log(`❌ Erro ao executar WorkerJobConferencia: ${e.message}`, 'workerMovimentoCaixa');
+    }
+
+    log(`🚀 Chamando Job Caixa Zig para o Grupo ${groupId || 'ALL'}...`, 'workerMovimentoCaixa');
+    try {
+        await processJobCaixaZig(group_id, dt_inicio, dt_fim);
+        log(`✅ Job Caixa Zig concluído.`, 'workerMovimentoCaixa');
+    } catch (e) {
+        log(`❌ Erro ao executar processJobCaixaZig: ${e.message}`, 'workerMovimentoCaixa');
+    }
 }
 
 async function ExecuteJobCaixa() {

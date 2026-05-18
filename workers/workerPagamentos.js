@@ -35,14 +35,63 @@ const ajustarDateTime = (str) => {
 };
 
 // ==========================================
+// CHAMADAS DE API ESPECÍFICAS
+// ==========================================
+
+async function buscarMeiosPagamentoAPI(lojaId, token) {
+    const url = `https://batech.portalmenew.com.br/terceiros/restful/meios-pagamento?lojas=${lojaId}&ativo=1&Authorization=${token}`;
+    console.log(url);
+
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error(`Erro na API (Meios Pagamento): Status ${response.status}`);
+    }
+    return await response.json();
+}
+
+// ==========================================
 // LÓGICA DE PERSISTÊNCIA
 // ==========================================
+
+async function salvarMeiosPagamento(conn, dados, systemUnitId) {
+    if (!dados || dados.length === 0) return;
+
+    // Prepara os dados para o bulk insert
+    const rows = dados.map(m => [
+        systemUnitId,
+        m.id,
+        m.codigo,
+        m.nome,
+        m.taxaComissao || 0,
+        m.redeId || null,
+        m.lojaId,
+        m.ativo ? 1 : 0
+    ]);
+
+    // O uso do ON DUPLICATE KEY UPDATE garante que se o id_externo + system_unit_id
+    // já existirem, ele apenas atualiza os dados, sem duplicar.
+    const sql = `
+        INSERT INTO meios_pagamento (
+            system_unit_id, id_externo, codigo, nome, taxa_comissao, rede_id, loja_id, ativo
+        ) VALUES ?
+        ON DUPLICATE KEY UPDATE
+            codigo = VALUES(codigo),
+            nome = VALUES(nome),
+            taxa_comissao = VALUES(taxa_comissao),
+            rede_id = VALUES(rede_id),
+            loja_id = VALUES(loja_id),
+            ativo = VALUES(ativo)
+    `;
+
+    const chunks = chunkArray(rows, CHUNK_SIZE);
+    for (const chunk of chunks) {
+        await conn.query(sql, [chunk]);
+    }
+}
 
 async function salvarMovimentoCaixa(conn, dados, lojaId, dtInicio, dtFim) {
     if (!dados || dados.length === 0) return;
 
-    // 1. Limpeza prévia (Delete cascade deve limpar os filhos se a FK estiver configurada, senão deletamos manual)
-    // Assumindo DELETE CASCADE no banco:
     await conn.execute(`
         DELETE FROM api_movimento_caixa 
         WHERE loja_id = ? AND data_contabil BETWEEN ? AND ?
@@ -51,55 +100,27 @@ async function salvarMovimentoCaixa(conn, dados, lojaId, dtInicio, dtFim) {
     const pais = [];
     const filhos = [];
 
-    // 2. Preparação dos dados (Gerando UUIDs para vincular Pai e Filho)
     for (const mov of dados) {
         const parentUUID = uuidv4();
 
         pais.push([
-            parentUUID,
-            mov.idMovimentoCaixa,
-            mov.lojaId,
-            mov.loja,
-            mov.modoVenda,
-            mov.idModoVenda,
-            mov.hora,
-            mov.idAtendente,
-            mov.nomeAtendente,
-            mov.vlDesconto,
-            mov.vlAcrescimo,
-            mov.vlTotalReceber,
-            mov.vlTotalRecebido,
-            mov.vlServicoRecebido,
-            mov.vlTrocoFormasPagto,
-            mov.numPessoas,
-            mov.operacaoId,
-            mov.maquinaId,
-            mov.nomeMaquina,
-            mov.periodoId,
-            mov.periodoNome,
-            mov.cancelado ? 1 : 0,
-            ajustarDateTime(mov.dataAbertura),
-            ajustarDateTime(mov.dataFechamento),
-            ajustarData(mov.dataContabil)
+            parentUUID, mov.idMovimentoCaixa, mov.lojaId, mov.loja, mov.modoVenda, mov.idModoVenda,
+            mov.hora, mov.idAtendente, mov.nomeAtendente, mov.vlDesconto, mov.vlAcrescimo,
+            mov.vlTotalReceber, mov.vlTotalRecebido, mov.vlServicoRecebido, mov.vlTrocoFormasPagto,
+            mov.numPessoas, mov.operacaoId, mov.maquinaId, mov.nomeMaquina, mov.periodoId,
+            mov.periodoNome, mov.cancelado ? 1 : 0, ajustarDateTime(mov.dataAbertura),
+            ajustarDateTime(mov.dataFechamento), ajustarData(mov.dataContabil)
         ]);
 
         if (mov.meiosPagamento && Array.isArray(mov.meiosPagamento)) {
             for (const mp of mov.meiosPagamento) {
                 filhos.push([
-                    uuidv4(),      // UUID do filho
-                    parentUUID,    // FK do pai
-                    mp.id,         // ID original do JSON
-                    mp.codigo,
-                    mp.nome,
-                    mp.valor,
-                    mp.troco,
-                    mp.valorRecebido
+                    uuidv4(), parentUUID, mp.id, mp.codigo, mp.nome, mp.valor, mp.troco, mp.valorRecebido
                 ]);
             }
         }
     }
 
-    // 3. Bulk Insert Pai
     if (pais.length > 0) {
         const sqlPai = `INSERT INTO api_movimento_caixa (
             uuid, id_movimento_caixa, loja_id, loja_nome, modo_venda, id_modo_venda, hora, 
@@ -113,7 +134,6 @@ async function salvarMovimentoCaixa(conn, dados, lojaId, dtInicio, dtFim) {
         for (const chunk of chunksPai) await conn.query(sqlPai, [chunk]);
     }
 
-    // 4. Bulk Insert Filho
     if (filhos.length > 0) {
         const sqlFilho = `INSERT INTO api_movimento_caixa_pagamentos (
             uuid, movimento_caixa_uuid, id_pagamento_json, codigo_meio, nome_meio, 
@@ -129,46 +149,24 @@ async function salvarPagamentos(conn, dados, lojaId, dtInicio, dtFim) {
     if (!dados || dados.length === 0) return;
 
     await conn.execute(`
-        DELETE FROM api_pagamentos 
+        DELETE FROM api_pagamentos
         WHERE id_loja = ? AND data_contabil BETWEEN ? AND ?
     `, [lojaId, dtInicio, dtFim]);
 
     const rows = dados.map(pg => [
-        uuidv4(),
-        pg.idOperacao,
-        pg.idLoja,
-        pg.nomeLoja,
-        pg.numPedido,
-        pg.seqPedido,
-        ajustarData(pg.dataContabil),
-        pg.status,
-        ajustarData(pg.dataLancamento),
-        pg.horaLancamento,
-        pg.idM,
-        pg.descricao,
-        ajustarData(pg.dataVencimento),
-        pg.diasVencimento,
-        pg.valor,
-        pg.taxaComissao,
-        pg.valorComissao,
-        pg.valorLiquido,
-        pg.parcela,
-        pg.nsu,
-        pg.origem,
-        pg.adquirente,
-        pg.autorizacao,
-        pg.idTipo,
-        pg.tipoPagamento,
-        pg.idBandeira,
-        pg.bandeira,
-        pg.cnpjAdquirente
+        uuidv4(), pg.idOperacao, pg.idLoja, pg.nomeLoja, pg.numPedido, pg.seqPedido,
+        ajustarData(pg.dataContabil), pg.status, ajustarData(pg.dataLancamento),
+        pg.horaLancamento, pg.idM, pg.descricao, ajustarData(pg.dataVencimento),
+        pg.diasVencimento, pg.valor, pg.taxaComissao, pg.valorComissao,
+        pg.valorLiquido, pg.parcela, pg.nsu, pg.origem, pg.adquirente,
+        pg.autorizacao, pg.idTipo, pg.tipoPagamento, pg.idBandeira, pg.bandeira, pg.cnpjAdquirente
     ]);
 
     const sql = `INSERT INTO api_pagamentos (
-        uuid, id_operacao, id_loja, nome_loja, num_pedido, seq_pedido, data_contabil, 
-        status_pagamento, data_lancamento, hora_lancamento, id_m, descricao, 
-        data_vencimento, dias_vencimento, valor, taxa_comissao, valor_comissao, 
-        valor_liquido, parcela, nsu, origem, adquirente, 
+        uuid, id_operacao, id_loja, nome_loja, num_pedido, seq_pedido, data_contabil,
+        status_pagamento, data_lancamento, hora_lancamento, id_m, descricao,
+        data_vencimento, dias_vencimento, valor, taxa_comissao, valor_comissao,
+        valor_liquido, parcela, nsu, origem, adquirente,
         autorizacao, id_tipo, tipo_pagamento, id_bandeira, bandeira, cnpj_adquirente
     ) VALUES ?`;
 
@@ -180,7 +178,7 @@ async function salvarFechamentoCaixa(conn, dados, lojaId, dtInicio, dtFim) {
     if (!dados || dados.length === 0) return;
 
     await conn.execute(`
-        DELETE FROM api_fechamento_caixa 
+        DELETE FROM api_fechamento_caixa
         WHERE id_estabelecimento = ? AND STR_TO_DATE(movimento, '%d/%m/%Y') BETWEEN ? AND ?
     `, [lojaId, dtInicio, dtFim]);
 
@@ -192,22 +190,10 @@ async function salvarFechamentoCaixa(conn, dados, lojaId, dtInicio, dtFim) {
         const parentUUID = uuidv4();
 
         pais.push([
-            parentUUID,
-            fech.idestabelecimento,
-            fech.nome_estabelecimento,
-            fech.movimento,
-            fech.turno,
-            fech.data_hora_abertura,
-            fech.data_hora_fechamento,
-            fech.operador,
-            fech.dinheiro_computado,
-            fech.cartao_computado,
-            fech.dinheiro_digitado,
-            fech.cartao_digitado,
-            fech.troco_inicial,
-            fech.troco_final,
-            fech.diferenca_dinheiro,
-            fech.diferenca_cartao
+            parentUUID, fech.idestabelecimento, fech.nome_estabelecimento, fech.movimento, fech.turno,
+            fech.data_hora_abertura, fech.data_hora_fechamento, fech.operador, fech.dinheiro_computado,
+            fech.cartao_computado, fech.dinheiro_digitado, fech.cartao_digitado, fech.troco_inicial,
+            fech.troco_final, fech.diferenca_dinheiro, fech.diferenca_cartao
         ]);
 
         if (fech.cartao_detalhado) {
@@ -225,9 +211,9 @@ async function salvarFechamentoCaixa(conn, dados, lojaId, dtInicio, dtFim) {
 
     if (pais.length > 0) {
         const sqlPai = `INSERT INTO api_fechamento_caixa (
-            uuid, id_estabelecimento, nome_estabelecimento, movimento, turno, 
-            data_hora_abertura, data_hora_fechamento, operador_id, dinheiro_computado, 
-            cartao_computado, dinheiro_digitado, cartao_digitado, troco_inicial, 
+            uuid, id_estabelecimento, nome_estabelecimento, movimento, turno,
+            data_hora_abertura, data_hora_fechamento, operador_id, dinheiro_computado,
+            cartao_computado, dinheiro_digitado, cartao_digitado, troco_inicial,
             troco_final, diferenca_dinheiro, diferenca_cartao
         ) VALUES ?`;
         const chunks = chunkArray(pais, CHUNK_SIZE);
@@ -259,13 +245,11 @@ async function ExecuteJobConferencia({ group_id, data } = {}) {
     const groupId = parseInt(group_id);
     const hoje = DateTime.local();
 
-    // Pega a data informada ou usa D-1 por padrão
     const dataAlvo = DateTime.fromISO(data ?? hoje.minus({ days: 1 }).toISODate());
     const dtFormatada = dataAlvo.toFormat('yyyy-MM-dd');
 
     log(`🚀 Iniciando Worker Conferencia | Grupo: ${groupId || 'ALL'} | Data: ${dtFormatada}`, 'workerConferencia');
 
-    // 1. Cria o objeto de configuração separado para poder logar
     const dbConfig = {
         host: process.env.DB_HOST,
         user: process.env.DB_USER,
@@ -274,26 +258,21 @@ async function ExecuteJobConferencia({ group_id, data } = {}) {
         dateStrings: true
     };
 
-    // 2. Loga para ver se o dotenv carregou as variáveis (escondendo a senha)
     console.log('🔌 Tentando conectar ao banco com as configurações:', {
         ...dbConfig,
         password: dbConfig.password ? '******' : 'UNDEFINED (VERIFIQUE O .ENV)'
     });
 
-    // 3. Tenta conectar
     let conn;
     try {
         conn = await mysql.createConnection(dbConfig);
         console.log(`✅ Conexão bem sucedida! Thread ID: ${conn.threadId}`);
     } catch (e) {
         console.error('❌ ERRO AO CONECTAR NO BANCO:', e.message);
-        console.error('   -> Verifique se o DB_HOST está correto (localhost vs 127.0.0.1)');
-        console.error('   -> Verifique se o .env está na raiz onde o comando node foi rodado.');
-        throw e; // Para o worker aqui se não conectar
+        throw e;
     }
 
     try {
-        // 1. Busca Grupos (se não passado) ou Unidades
         let unidades = [];
         if (groupId) {
             const [rows] = await conn.execute(`
@@ -304,7 +283,6 @@ async function ExecuteJobConferencia({ group_id, data } = {}) {
             `, [groupId]);
             unidades = rows;
         } else {
-            // Se quiser processar TUDO (cuidado com timeout)
             const [rows] = await conn.execute(`SELECT id AS system_unit_id, custom_code, name FROM system_unit WHERE custom_code IS NOT NULL`);
             unidades = rows;
         }
@@ -314,18 +292,31 @@ async function ExecuteJobConferencia({ group_id, data } = {}) {
             return;
         }
 
-        // 2. Login único
         const authToken = await loginMenew();
         if (!authToken) {
             throw new Error('Falha no login da API Menew');
         }
 
-        // 3. Processamento da Data Única
         log(`📅 Processando Data: ${dtFormatada}`, 'workerConferencia');
 
         for (const unidade of unidades) {
             const lojaId = unidade.custom_code;
+            const systemUnitId = unidade.system_unit_id; // Pega o ID interno retornado pelo select
             log(`🏢 Loja: ${unidade.name} (${lojaId})`, 'workerConferencia');
+
+            // --- NOVO: CHAMADA 0: ATUALIZAR MEIOS DE PAGAMENTO ---
+            try {
+                const respMeios = await buscarMeiosPagamentoAPI(lojaId, authToken);
+
+                if (respMeios && respMeios.length > 0) {
+                    await salvarMeiosPagamento(conn, respMeios, systemUnitId);
+                    log(`  ✅ Meios Pagamento: ${respMeios.length} atualizados`, 'workerConferencia');
+                } else {
+                    log(`  ℹ️ Meios Pagamento: Sem dados`, 'workerConferencia');
+                }
+            } catch (e) {
+                log(`  ❌ Erro Meios Pagamento: ${e.message}`, 'workerConferencia');
+            }
 
             // --- CHAMADA 1: MOVIMENTO CAIXA ---
             try {
@@ -390,7 +381,6 @@ async function ExecuteJobConferencia({ group_id, data } = {}) {
 }
 
 async function WorkerJobConferencia(dt_inicio, dt_fim, group_id) {
-    // Defaults: ontem -> hoje
     const hoje  = DateTime.now().toISODate();
     const ontem = DateTime.now().minus({ days: 1 }).toISODate();
 
@@ -402,7 +392,7 @@ async function WorkerJobConferencia(dt_inicio, dt_fim, group_id) {
     let start = DateTime.fromISO(dt_inicio);
     let end   = DateTime.fromISO(dt_fim);
     if (end < start) [start, end] = [end, start];
-     const grupos = group_id
+    const grupos = group_id
         ? [{ id: Number(group_id) }]
         : await callPHP('getGroupsToProcess', {});
 
@@ -412,7 +402,7 @@ async function WorkerJobConferencia(dt_inicio, dt_fim, group_id) {
     }
 
     for (const g of grupos) {
-        const gid = g.id ?? g; // tolera {id} ou número puro
+        const gid = g.id ?? g;
 
         log(`Start: ${start.toISODate()} - End: ${end.toISODate()}`);
         log(`⏱️ Início do processamento às ${DateTime.local().toFormat('HH:mm:ss')}`, 'ExecuteJobConferencia');
@@ -427,6 +417,6 @@ async function WorkerJobConferencia(dt_inicio, dt_fim, group_id) {
     }
 }
 
-module.exports = { ExecuteJobConferencia,WorkerJobConferencia };
+module.exports = { ExecuteJobConferencia, WorkerJobConferencia };
 
-if (require.main === module) { WorkerJobConferencia()}
+if (require.main === module) { WorkerJobConferencia() }

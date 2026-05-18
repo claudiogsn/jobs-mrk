@@ -44,10 +44,27 @@ async function callMenew(methodPayload, token) {
                 'Authorization': `Bearer ${token}`
             }
         });
-        appendApiLog('menew', `✅ Menew call (${methodPayload?.requests?.method}): sucesso`);
+        appendApiLog('menew', `✅ Menew call (${methodPayload?.requests?.method}): ${JSON.stringify(res.data)}`);
         return res.data;
     } catch (err) {
         appendApiLog('menew', `❌ ERROR (${methodPayload?.requests?.method}): ${JSON.stringify(err.response?.data || err.message)}`);
+        return null;
+    }
+}
+
+async function callPHP(method, data) {
+    const token = process.env.MRK_TOKEN;
+    const payload = { method, token, data };
+
+    appendApiLog('php_backend', `➡️ REQUEST: ${method} - ${JSON.stringify(payload)} - URL: ${process.env.BACKEND_URL}`);
+
+    try {
+        const response = await axios.post(process.env.BACKEND_URL, payload);
+        appendApiLog('php_backend', `✅ RESPONSE (${method}): ${JSON.stringify(response.data)} - URL: ${process.env.BACKEND_URL}`);
+        return response.data;
+    } catch (error) {
+        const errorContent = error.response?.data || error.message || 'Erro desconhecido';
+        appendApiLog('php_backend', `❌ ERROR (${method}): ${JSON.stringify(errorContent)} - URL: ${process.env.BACKEND_URL}`);
         return null;
     }
 }
@@ -75,23 +92,6 @@ async function loginMenew() {
         return response.data?.result || null;
     } catch (err) {
         appendApiLog('menew', `❌ Erro ao fazer login na Menew: ${JSON.stringify(err.response?.data || err.message)}`);
-        return null;
-    }
-}
-
-async function callPHP(method, data) {
-    const token = process.env.MRK_TOKEN;
-    const payload = { method, token, data };
-
-    appendApiLog('php_backend', `➡️ REQUEST: ${method} - ${JSON.stringify(payload)} - URL: ${process.env.BACKEND_URL}`);
-
-    try {
-        const response = await axios.post(process.env.BACKEND_URL, payload);
-        appendApiLog('php_backend', `✅ RESPONSE (${method}): ${JSON.stringify(response.data)} - URL: ${process.env.BACKEND_URL}`);
-        return response.data;
-    } catch (error) {
-        const errorContent = error.response?.data || error.message || 'Erro desconhecido';
-        appendApiLog('php_backend', `❌ ERROR (${method}): ${JSON.stringify(errorContent)} - URL: ${process.env.BACKEND_URL}`);
         return null;
     }
 }
