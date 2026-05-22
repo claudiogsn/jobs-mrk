@@ -3,7 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const { getLogs,log} = require('./utils/logger');
-const { sendWhatsappText} = require('./utils/utils');
+const { sendWhatsappText, getConnection } = require('./utils/utils');
+const { appendApiLog } = require('./utils/apiLogger');
+const axios = require('axios');
 
 const { processItemVenda } = require('./workers/workerItemVenda');
 const { processConsolidation } = require('./workers/workerConsolidateSales');
@@ -640,6 +642,333 @@ router.post('/auth', (req, res) => {
 
     res.json({ success: usuario === validUser && senha === validPass });
 });
+
+// ============================================================
+// iFood — Gestão de Credenciais
+// ============================================================
+
+const ifoodPendingAuth = new Map();
+
+// Helper: loga req/resp do iFood em logs/ifood.log
+function ifoodLog(label, data) {
+    const safe = JSON.stringify(data, null, 2);
+    appendApiLog('ifood', `${label}\n${safe}`);
+}
+
+// Wrapper axios para iFood com log completo
+async function ifoodAxios(config) {
+    config.method = config.method || 'GET';
+    const label = `➡️  ${config.method.toUpperCase()} ${config.url}`;
+    ifoodLog(label, {
+        params:  config.params  || null,
+        headers: config.headers || null,
+        body:    config.data    || null,
+    });
+    try {
+        const resp = await axios(config);
+        ifoodLog(`✅ HTTP ${resp.status} ← ${config.url}`, resp.data);
+        return resp;
+    } catch (err) {
+        ifoodLog(`❌ HTTP ${err.response?.status ?? 'NETWORK'} ← ${config.url}`, {
+            status:  err.response?.status,
+            headers: err.response?.headers,
+            body:    err.response?.data,
+            message: err.message,
+        });
+        throw err;
+    }
+}
+
+router.get('/api/ifood/empresas', async (req, res) => {
+    const conn = await getConnection();
+    try {
+        const [rows] = await conn.execute(`
+            SELECT su.id, su.name, su.cnpj,
+                   ic.id            AS credencial_id,
+                   ic.merchant_id,
+                   ic.merchant_nome,
+                   ic.status        AS ifood_status,
+                   ic.ambiente,
+                   ic.conectada_em,
+                   ic.ultimo_erro
+            FROM system_unit su
+            LEFT JOIN ifood_credenciais ic ON ic.empresa_id = su.id
+            WHERE su.status = 1
+            ORDER BY su.name
+        `);
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    } finally {
+        await conn.end();
+    }
+});
+
+router.post('/api/ifood/solicitar-codigo', async (req, res) => {
+    ifoodLog('📥 POST /api/ifood/solicitar-codigo — body recebido', req.body);
+
+    const { empresa_id, merchant_id, merchant_nome, ambiente = 'PRODUCAO' } = req.body;
+    if (!empresa_id || !merchant_id) {
+        const erro = { error: 'empresa_id e merchant_id são obrigatórios' };
+        ifoodLog('⚠️  Validação falhou', erro);
+        return res.status(400).json(erro);
+    }
+
+    ifoodLog('🔑 IFOOD_CLIENT_ID configurado?', {
+        clientId: process.env.IFOOD_CLIENT_ID ? `${process.env.IFOOD_CLIENT_ID.slice(0, 6)}...` : 'NÃO DEFINIDO',
+    });
+
+    try {
+        // clientId como query param + Content-Type form-urlencoded (exigido pela API)
+        const resp = await ifoodAxios({
+            method: 'post',
+            url: `https://merchant-api.ifood.com.br/authentication/v1.0/oauth/userCode`,
+            params: { clientId: process.env.IFOOD_CLIENT_ID },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            data: new URLSearchParams({ clientId: process.env.IFOOD_CLIENT_ID }).toString(),
+        });
+
+        const { userCode, verificationUrl, authorizationCodeVerifier, expiresIn } = resp.data;
+
+        const conn = await getConnection();
+        try {
+            await conn.execute(`
+                INSERT INTO ifood_credenciais (empresa_id, merchant_id, merchant_nome, status, ambiente)
+                VALUES (?, ?, ?, 'PENDENTE', ?)
+                ON DUPLICATE KEY UPDATE
+                    merchant_nome = VALUES(merchant_nome),
+                    status        = 'PENDENTE',
+                    ultimo_erro   = NULL
+            `, [empresa_id, merchant_id, merchant_nome || '', ambiente]);
+
+            const [linhas] = await conn.execute(
+                `SELECT id FROM ifood_credenciais WHERE empresa_id = ? AND ambiente = ? LIMIT 1`,
+                [empresa_id, ambiente]
+            );
+            const credencialId = linhas[0].id;
+
+            ifoodPendingAuth.set(credencialId, {
+                userCode,
+                authorizationCodeVerifier,
+                expiresAt: Date.now() + (expiresIn || 600) * 1000,
+            });
+
+            ifoodLog('✅ Código solicitado com sucesso', { credencialId, userCode, verificationUrl, expiresIn });
+            res.json({ credencialId, userCode, verificationUrl, expiresIn });
+        } finally {
+            await conn.end();
+        }
+    } catch (err) {
+        log(`❌ Erro ao solicitar código iFood: ${err.message}`, 'iFoodAuth');
+        res.status(500).json({ error: 'Erro ao solicitar código iFood: ' + (err.response?.data?.message || err.message) });
+    }
+});
+
+router.post('/api/ifood/verificar-autorizacao', async (req, res) => {
+    ifoodLog('📥 POST /api/ifood/verificar-autorizacao — body recebido', {
+        credencial_id:      req.body.credencial_id,
+        authorization_code: req.body.authorization_code
+            ? req.body.authorization_code.slice(0, 8) + '...'
+            : 'NÃO INFORMADO',
+    });
+
+    const { credencial_id, authorization_code } = req.body;
+    const id = Number(credencial_id);
+
+    if (!authorization_code) {
+        return res.status(400).json({ error: 'authorization_code é obrigatório.' });
+    }
+
+    const pending = ifoodPendingAuth.get(id);
+
+    if (!pending) {
+        ifoodLog('⚠️  Sem autorização pendente no Map', { credencial_id, mapKeys: [...ifoodPendingAuth.keys()] });
+        return res.status(400).json({ error: 'Sessão expirada ou inválida. Solicite um novo código.' });
+    }
+    if (Date.now() > pending.expiresAt) {
+        ifoodLog('⚠️  Código expirado', { credencial_id, expiresAt: new Date(pending.expiresAt).toISOString() });
+        ifoodPendingAuth.delete(id);
+        return res.status(400).json({ error: 'Código expirado. Solicite um novo código.' });
+    }
+
+    ifoodLog('🔁 Trocando authorizationCode por token', {
+        authorizationCode: authorization_code.slice(0, 8) + '...',
+        verifier:          pending.authorizationCodeVerifier.slice(0, 12) + '...',
+    });
+
+    try {
+        const tokenResp = await ifoodAxios({
+            method: 'post',
+            url: 'https://merchant-api.ifood.com.br/authentication/v1.0/oauth/token',
+            data: new URLSearchParams({
+                grantType:                 'authorization_code',
+                clientId:                  process.env.IFOOD_CLIENT_ID,
+                clientSecret:              process.env.IFOOD_CLIENT_SECRET,
+                authorizationCode:         authorization_code,
+                authorizationCodeVerifier: pending.authorizationCodeVerifier,
+            }).toString(),
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        });
+
+        const { accessToken, refreshToken, expiresIn } = tokenResp.data;
+        const expiraEm = DateTime.now()
+            .plus({ seconds: expiresIn || 21600 })
+            .toFormat('yyyy-MM-dd HH:mm:ss');
+
+        const conn = await getConnection();
+        try {
+            await conn.execute(`
+                UPDATE ifood_credenciais
+                   SET access_token           = ?,
+                       access_token_expira_em = ?,
+                       refresh_token          = ?,
+                       status                 = 'CONECTADA',
+                       ultimo_erro            = NULL,
+                       conectada_em           = NOW()
+                 WHERE id = ?
+            `, [accessToken, expiraEm, refreshToken, id]);
+        } finally {
+            await conn.end();
+        }
+
+        ifoodPendingAuth.delete(id);
+        ifoodLog('✅ Loja conectada com sucesso', { credencial_id: id, expiraEm });
+        res.json({ status: 'conectada', message: 'Loja conectada com sucesso!' });
+    } catch (err) {
+        log(`❌ Erro ao verificar autorização iFood: ${err.message}`, 'iFoodAuth');
+        // 401/403 = usuário ainda não autorizou ou o código expirou
+        if ([401, 403].includes(err.response?.status)) {
+            return res.json({ status: 'pending', message: 'Autorização ainda não confirmada no iFood. Certifique-se de ter clicado em "Autorizar" no portal do parceiro e tente novamente.' });
+        }
+        const detalhe = err.response?.data?.error?.message || err.response?.data?.message || err.message;
+        res.status(500).json({ error: detalhe });
+    }
+});
+
+router.delete('/api/ifood/credencial/:id', async (req, res) => {
+    const conn = await getConnection();
+    try {
+        await conn.execute(
+            `UPDATE ifood_credenciais SET status = 'DESCONECTADA', ultimo_erro = 'Desconectado manualmente' WHERE id = ?`,
+            [req.params.id]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    } finally {
+        await conn.end();
+    }
+});
+
+// Salva refresh_token manualmente (fallback quando userCode não está habilitado)
+router.post('/api/ifood/salvar-token-manual', async (req, res) => {
+    ifoodLog('📥 POST /api/ifood/salvar-token-manual — body recebido', {
+        ...req.body,
+        refresh_token: req.body.refresh_token ? req.body.refresh_token.slice(0, 12) + '...' : 'VAZIO',
+    });
+
+    const { empresa_id, merchant_id, merchant_nome, refresh_token, ambiente = 'PRODUCAO' } = req.body;
+    if (!empresa_id || !merchant_id || !refresh_token) {
+        return res.status(400).json({ error: 'empresa_id, merchant_id e refresh_token são obrigatórios' });
+    }
+
+    const conn = await getConnection();
+    try {
+        await conn.execute(`
+            INSERT INTO ifood_credenciais (empresa_id, merchant_id, merchant_nome, refresh_token, status, ambiente)
+            VALUES (?, ?, ?, ?, 'CONECTADA', ?)
+            ON DUPLICATE KEY UPDATE
+                merchant_nome = VALUES(merchant_nome),
+                refresh_token = VALUES(refresh_token),
+                status        = 'CONECTADA',
+                ultimo_erro   = NULL,
+                conectada_em  = NOW()
+        `, [empresa_id, merchant_id, merchant_nome || '', refresh_token, ambiente]);
+
+        ifoodLog('✅ Token manual salvo com sucesso', { empresa_id, merchant_id, ambiente });
+        res.json({ success: true, message: 'Token salvo com sucesso.' });
+    } catch (err) {
+        ifoodLog('❌ Erro ao salvar token manual', { error: err.message });
+        res.status(500).json({ error: err.message });
+    } finally {
+        await conn.end();
+    }
+});
+
+router.get('/api/ifood/pedido/:orderId', async (req, res) => {
+    const { orderId } = req.params;
+    const conn = await getConnection();
+    try {
+        // Busca qual credencial tem esse pedido (via ifood_pedidos ou qualquer credencial conectada)
+        const [credRows] = await conn.execute(`
+            SELECT c.* FROM ifood_credenciais c
+            LEFT JOIN ifood_pedidos p ON p.merchant_id = c.merchant_id
+            WHERE p.order_id = ? AND c.status = 'CONECTADA'
+            LIMIT 1
+        `, [orderId]);
+
+        // Fallback: se o pedido não estiver na tabela ainda, usa qualquer credencial conectada
+        let cred = credRows[0];
+        if (!cred) {
+            const [any] = await conn.execute(
+                `SELECT * FROM ifood_credenciais WHERE status = 'CONECTADA' LIMIT 1`
+            );
+            cred = any[0];
+        }
+
+        if (!cred) return res.status(404).json({ error: 'Nenhuma credencial iFood conectada.' });
+
+        // Garante access_token válido
+        const agora = Date.now();
+        const expira = cred.access_token_expira_em ? new Date(cred.access_token_expira_em).getTime() : 0;
+        let token = cred.access_token;
+
+        if (!token || expira - 5 * 60 * 1000 <= agora) {
+            const params = new URLSearchParams({
+                grantType: 'refresh_token',
+                clientId: process.env.IFOOD_CLIENT_ID,
+                clientSecret: process.env.IFOOD_CLIENT_SECRET,
+                refreshToken: cred.refresh_token,
+            });
+            const tokenResp = await ifoodAxios({
+                method: 'POST',
+                url: 'https://merchant-api.ifood.com.br/authentication/v1.0/oauth/token',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                data: params.toString(),
+            });
+            token = tokenResp.data.accessToken;
+        }
+
+        const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
+        if (process.env.IFOOD_AMBIENTE === 'TESTE') headers['x-request-homologation'] = 'true';
+
+        const orderResp = await ifoodAxios({
+            url: `https://merchant-api.ifood.com.br/order/v1.0/orders/${orderId}`,
+            headers,
+        });
+
+        res.json(orderResp.data);
+    } catch (err) {
+        const status = err.response?.status || 500;
+        res.status(status).json({ error: err.response?.data || err.message });
+    } finally {
+        await conn.end();
+    }
+});
+
+router.post('/run/ifood-sync', async (req, res) => {
+    const { ExecuteJobIfoodSync } = require('./workers/workerIfoodSync');
+    ExecuteJobIfoodSync()
+        .then(() => log('✅ iFood Sync manual finalizado.', 'ExpressServer'))
+        .catch(err => log(`❌ Erro iFood Sync manual: ${err.message}`, 'ExpressServer'));
+    res.json({ success: true, message: 'iFood Sync iniciado em background. Acompanhe em logs/ifood.log' });
+});
+
+router.get('/ifood', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views/ifood.html'));
+});
+
+// ============================================================
 
 router.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'views/dashboard.html'));

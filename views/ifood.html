@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/x-icon" href="./jobs/assets/favicon.ico" />
+    <title>iFood — Gestão de Credenciais</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        .badge-conectada    { @apply bg-emerald-100 text-emerald-700 border border-emerald-200; }
+        .badge-desconectada { @apply bg-red-100 text-red-700 border border-red-200; }
+        .badge-pendente     { @apply bg-amber-100 text-amber-700 border border-amber-200; }
+        .badge-novo         { @apply bg-gray-100 text-gray-500 border border-gray-200; }
+
+        .step-circle-active   { @apply w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center text-sm font-bold; }
+        .step-circle-done     { @apply w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center text-sm font-bold; }
+        .step-circle-inactive { @apply w-8 h-8 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center text-sm font-bold; }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen">
+
+<!-- NAV -->
+<nav class="bg-red-600 text-white shadow-md">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <span class="text-2xl">🛵</span>
+            <div>
+                <h1 class="text-lg font-bold leading-tight">iFood — Gestão de Credenciais</h1>
+                <p class="text-red-200 text-xs">Portal Meraki · Workers Dashboard</p>
+            </div>
+        </div>
+        <a href="/jobs" class="text-sm text-red-200 hover:text-white transition flex items-center gap-1">
+            ← Voltar ao Dashboard
+        </a>
+    </div>
+</nav>
+
+<!-- MAIN -->
+<main class="max-w-7xl mx-auto px-6 py-8">
+
+    <!-- Header + actions -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h2 class="text-xl font-semibold text-gray-800">Empresas</h2>
+            <p class="text-sm text-gray-500 mt-0.5">
+                Gerencie a conexão de cada loja com a Merchant API do iFood
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="rodarSyncManual()"
+                    id="btnSync"
+                    class="flex items-center gap-2 text-sm bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg px-4 py-2 shadow-sm transition">
+                ▶ Rodar Sync Agora
+            </button>
+            <button onclick="carregarEmpresas()"
+                    class="flex items-center gap-2 text-sm bg-white border border-gray-200 rounded-lg px-4 py-2 hover:bg-gray-50 shadow-sm transition">
+                <span id="refreshIcon">🔄</span> Atualizar
+            </button>
+        </div>
+    </div>
+
+    <!-- Filtro -->
+    <div class="mb-4">
+        <input id="filtro" type="text" placeholder="Buscar empresa..."
+               oninput="filtrarTabela()"
+               class="w-full max-w-sm border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 bg-white shadow-sm" />
+    </div>
+
+    <!-- Tabela -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="bg-gray-50 border-b border-gray-100">
+                    <th class="text-left px-5 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Empresa</th>
+                    <th class="text-left px-5 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">CNPJ</th>
+                    <th class="text-left px-5 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Merchant ID</th>
+                    <th class="text-left px-5 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Status</th>
+                    <th class="text-left px-5 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Ambiente</th>
+                    <th class="text-left px-5 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Conectada em</th>
+                    <th class="px-5 py-3"></th>
+                </tr>
+            </thead>
+            <tbody id="tabelaBody">
+                <tr>
+                    <td colspan="7" class="text-center py-12 text-gray-400">
+                        <div class="flex flex-col items-center gap-2">
+                            <span class="text-3xl">⏳</span>
+                            <span>Carregando empresas...</span>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Legenda -->
+    <div class="flex flex-wrap gap-4 mt-4 text-xs text-gray-500">
+        <span class="flex items-center gap-1.5">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400"></span> Conectada
+        </span>
+        <span class="flex items-center gap-1.5">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-red-400"></span> Desconectada
+        </span>
+        <span class="flex items-center gap-1.5">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-400"></span> Pendente
+        </span>
+        <span class="flex items-center gap-1.5">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-300"></span> Não configurada
+        </span>
+    </div>
+</main>
+
+<!-- ============================================================ -->
+<!-- MODAL DE CONEXÃO -->
+<!-- ============================================================ -->
+<div id="modal" class="fixed inset-0 z-50 hidden bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg relative">
+
+        <!-- Close -->
+        <button onclick="fecharModal()"
+                class="absolute top-4 right-4 text-gray-300 hover:text-gray-600 text-xl transition">✕</button>
+
+        <!-- Modal header -->
+        <div class="px-6 pt-6 pb-4 border-b border-gray-100">
+            <h3 class="text-lg font-bold text-gray-800" id="modalTitulo">Conectar loja ao iFood</h3>
+            <p class="text-sm text-gray-500 mt-0.5" id="modalSubtitulo">Siga os passos abaixo</p>
+        </div>
+
+        <!-- Steps indicator -->
+        <div class="px-6 pt-4 pb-2 flex items-center gap-2" id="stepsBar">
+            <div id="step1Circle" class="step-circle-active">1</div>
+            <div class="flex-1 h-0.5 bg-gray-200 rounded" id="line12"></div>
+            <div id="step2Circle" class="step-circle-inactive">2</div>
+            <div class="flex-1 h-0.5 bg-gray-200 rounded" id="line23"></div>
+            <div id="step3Circle" class="step-circle-inactive">3</div>
+        </div>
+
+        <!-- Step 1: Dados da loja -->
+        <div id="step1" class="px-6 py-4 space-y-4">
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Empresa</label>
+                <div id="empresaNome" class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 font-medium"></div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Merchant ID (UUID iFood) <span class="text-red-500">*</span></label>
+                <input id="inputMerchantId" type="text"
+                       placeholder="ex: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                       class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 mb-1">Nome da loja no iFood</label>
+                    <input id="inputMerchantNome" type="text"
+                           placeholder="ex: Loja Centro"
+                           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 mb-1">Ambiente</label>
+                    <select id="inputAmbiente"
+                            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 bg-white">
+                        <option value="PRODUCAO">Produção</option>
+                        <option value="TESTE">Teste / Homologação</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Tabs: userCode vs manual -->
+            <div class="border border-gray-200 rounded-xl overflow-hidden">
+                <div class="flex border-b border-gray-200 bg-gray-50">
+                    <button id="tabUserCode" onclick="setTab('userCode')"
+                            class="flex-1 py-2 text-xs font-semibold text-red-600 border-b-2 border-red-500 transition">
+                        🔑 Fluxo de Autorização iFood
+                    </button>
+                    <button id="tabManual" onclick="setTab('manual')"
+                            class="flex-1 py-2 text-xs font-semibold text-gray-400 border-b-2 border-transparent hover:text-gray-600 transition">
+                        ✏️ Token Manual (fallback)
+                    </button>
+                </div>
+
+                <!-- Painel userCode -->
+                <div id="painelUserCode" class="p-4">
+                    <p class="text-xs text-gray-500 leading-relaxed">
+                        O iFood abrirá um código de verificação. Você acessa o portal do parceiro, digita o código e autoriza o acesso.
+                        <br><span class="text-amber-600 font-medium">⚠️ Requer que o grant type <code>user_code</code> esteja habilitado para o seu clientId no Portal do Desenvolvedor iFood.</span>
+                    </p>
+                    <button onclick="solicitarCodigo()"
+                            id="btnSolicitarCodigo"
+                            class="mt-3 w-full bg-red-500 hover:bg-red-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition">
+                        Solicitar código de autorização →
+                    </button>
+                </div>
+
+                <!-- Painel token manual -->
+                <div id="painelManual" class="p-4 hidden">
+                    <p class="text-xs text-gray-500 mb-3 leading-relaxed">
+                        Use quando já possui o <strong>refresh_token</strong> obtido externamente (ex.: via Postman, curl ou portal iFood).
+                    </p>
+                    <label class="block text-xs font-semibold text-gray-500 mb-1">Refresh Token <span class="text-red-500">*</span></label>
+                    <textarea id="inputRefreshToken" rows="3"
+                              placeholder="Cole aqui o refresh_token completo"
+                              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-300 resize-none"></textarea>
+                    <button onclick="salvarTokenManual()"
+                            id="btnSalvarToken"
+                            class="mt-3 w-full bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition">
+                        Salvar e Conectar ✓
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Autorização no iFood -->
+        <div id="step2" class="px-6 py-4 space-y-4 hidden">
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+                <p class="font-semibold mb-1">📋 Instruções</p>
+                <ol class="list-decimal list-inside space-y-1 text-xs leading-relaxed">
+                    <li>Acesse o link abaixo no Portal do Parceiro iFood</li>
+                    <li>Entre com suas credenciais do parceiro</li>
+                    <li>Digite <strong>exatamente</strong> o código exibido abaixo</li>
+                    <li>Clique em "Autorizar" no iFood</li>
+                    <li>Volte aqui e clique em "Já autorizei"</li>
+                </ol>
+                <p class="mt-2 text-xs text-red-700 font-medium">⚠️ Não clique em "Solicitar código" novamente — isso invalida este código.</p>
+            </div>
+
+            <!-- User Code -->
+            <div class="text-center">
+                <p class="text-xs text-gray-400 mb-2 uppercase font-semibold tracking-wider">Código de verificação</p>
+                <div class="flex items-center justify-center gap-3">
+                    <span id="userCodeDisplay"
+                          class="text-3xl font-mono font-bold tracking-[0.3em] text-gray-800 bg-gray-100 px-6 py-3 rounded-xl border border-gray-200">
+                        ——————
+                    </span>
+                    <button onclick="copiarCodigo()"
+                            title="Copiar código"
+                            class="text-gray-400 hover:text-gray-700 transition text-lg">
+                        📋
+                    </button>
+                </div>
+                <p class="text-xs text-gray-400 mt-1" id="codigoExpira"></p>
+            </div>
+
+            <!-- Link -->
+            <div class="text-center">
+                <a id="linkVerificacao" href="#" target="_blank"
+                   class="inline-flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition">
+                    🔗 Abrir Portal iFood para autorizar
+                </a>
+            </div>
+
+            <!-- Campo do authorizationCode -->
+            <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <p class="text-xs font-semibold text-blue-700 mb-1">📋 Após autorizar no iFood</p>
+                <p class="text-xs text-blue-600 mb-3 leading-relaxed">
+                    Depois de clicar em "Autorizar" no portal iFood, você verá (ou será redirecionado com) um <strong>código de autorização</strong>. Cole-o aqui:
+                </p>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Authorization Code <span class="text-red-500">*</span></label>
+                <input id="inputAuthCode" type="text"
+                       placeholder="Cole aqui o código de autorização do iFood"
+                       class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-300" />
+            </div>
+
+            <!-- Poll status -->
+            <div id="pollStatus" class="text-center text-xs text-gray-400 hidden">
+                <span id="pollMsg">⏳ Verificando autorização...</span>
+            </div>
+
+            <div class="pt-2 flex justify-between">
+                <button onclick="voltarStep1()"
+                        class="text-sm text-gray-400 hover:text-gray-600 transition px-3 py-2 rounded-lg">
+                    ← Voltar
+                </button>
+                <button onclick="verificarAutorizacao()"
+                        id="btnJaAutorizei"
+                        class="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition flex items-center gap-2">
+                    ✅ Confirmar autorização
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 3: Sucesso -->
+        <div id="step3" class="px-6 py-8 text-center hidden">
+            <div class="text-6xl mb-4">🎉</div>
+            <h4 class="text-lg font-bold text-gray-800 mb-2">Loja conectada com sucesso!</h4>
+            <p class="text-sm text-gray-500 mb-6">
+                A loja <strong id="lojaConectadaNome"></strong> está agora integrada ao iFood.<br>
+                O worker de sync irá rodar automaticamente no horário configurado.
+            </p>
+            <button onclick="fecharModal(); carregarEmpresas()"
+                    class="bg-red-500 hover:bg-red-600 text-white text-sm font-semibold px-6 py-2.5 rounded-lg transition">
+                Fechar
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SCRIPT -->
+<!-- ============================================================ -->
+<script>
+    const BASE = '/jobs';
+    let empresas = [];
+    let modalState = { empresaId: null, empresaNome: null, credencialId: null };
+
+    // ---- Carrega tabela ----
+    async function carregarEmpresas() {
+        document.getElementById('refreshIcon').textContent = '⏳';
+        try {
+            const resp = await fetch(`${BASE}/api/ifood/empresas`);
+            empresas = await resp.json();
+            renderTabela(empresas);
+        } catch (err) {
+            mostrarErro('Erro ao carregar empresas: ' + err.message);
+        } finally {
+            document.getElementById('refreshIcon').textContent = '🔄';
+        }
+    }
+
+    function filtrarTabela() {
+        const q = document.getElementById('filtro').value.toLowerCase();
+        const filtradas = empresas.filter(e =>
+            (e.name || '').toLowerCase().includes(q) ||
+            (e.cnpj || '').includes(q) ||
+            (e.merchant_id || '').toLowerCase().includes(q)
+        );
+        renderTabela(filtradas);
+    }
+
+    function renderTabela(lista) {
+        const tbody = document.getElementById('tabelaBody');
+        if (!lista.length) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center py-12 text-gray-400">
+                <div class="flex flex-col items-center gap-2"><span class="text-3xl">🔍</span><span>Nenhuma empresa encontrada</span></div>
+            </td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = lista.map(e => {
+            const badge    = getBadge(e.ifood_status);
+            const merchant = e.merchant_id
+                ? `<span class="font-mono text-xs text-gray-500">${e.merchant_id.slice(0,8)}…</span>`
+                : '<span class="text-gray-300 text-xs">—</span>';
+            const conectadaEm = e.conectada_em
+                ? `<span class="text-xs text-gray-500">${fmtDate(e.conectada_em)}</span>`
+                : '<span class="text-gray-300 text-xs">—</span>';
+            const ambiente = e.ambiente
+                ? `<span class="text-xs px-2 py-0.5 rounded-full ${e.ambiente === 'PRODUCAO' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'} border">${e.ambiente === 'PRODUCAO' ? 'Produção' : 'Teste'}</span>`
+                : '<span class="text-gray-300 text-xs">—</span>';
+            const erroBadge = e.ultimo_erro
+                ? `<span title="${e.ultimo_erro}" class="ml-1 text-red-400 cursor-help text-xs">⚠️</span>`
+                : '';
+
+            const acoes = renderAcoes(e);
+
+            return `<tr class="border-t border-gray-50 hover:bg-gray-50/60 transition-colors group">
+                <td class="px-5 py-3.5">
+                    <div class="font-medium text-gray-800">${e.name || '—'}</div>
+                </td>
+                <td class="px-5 py-3.5">
+                    <span class="text-xs font-mono text-gray-500">${fmtCnpj(e.cnpj)}</span>
+                </td>
+                <td class="px-5 py-3.5">${merchant}</td>
+                <td class="px-5 py-3.5">
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${badge.cls}">
+                        ${badge.dot} ${badge.label}
+                    </span>${erroBadge}
+                </td>
+                <td class="px-5 py-3.5">${ambiente}</td>
+                <td class="px-5 py-3.5">${conectadaEm}</td>
+                <td class="px-5 py-3.5 text-right">${acoes}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderAcoes(e) {
+        if (!e.ifood_status || e.ifood_status === null) {
+            return `<button onclick="abrirModalConectar(${e.id}, '${escapar(e.name)}')"
+                        class="text-xs bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg transition font-medium">
+                        + Conectar
+                    </button>`;
+        }
+        if (e.ifood_status === 'CONECTADA') {
+            return `<div class="flex items-center gap-2 justify-end">
+                <button onclick="abrirModalConectar(${e.id}, '${escapar(e.name)}')"
+                        class="text-xs text-gray-400 hover:text-gray-600 px-2 py-1.5 rounded-lg transition">
+                    Reconectar
+                </button>
+                <button onclick="desconectar(${e.credencial_id}, '${escapar(e.name)}')"
+                        class="text-xs bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-500 border border-gray-200 hover:border-red-200 px-3 py-1.5 rounded-lg transition">
+                    Desconectar
+                </button>
+            </div>`;
+        }
+        if (e.ifood_status === 'DESCONECTADA' || e.ifood_status === 'PENDENTE') {
+            return `<button onclick="abrirModalConectar(${e.id}, '${escapar(e.name)}')"
+                        class="text-xs bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200 px-3 py-1.5 rounded-lg transition font-medium">
+                        Reconectar
+                    </button>`;
+        }
+        return '';
+    }
+
+    function getBadge(status) {
+        const map = {
+            CONECTADA:    { cls: 'bg-emerald-50 text-emerald-700 border border-emerald-200', dot: '🟢', label: 'Conectada' },
+            DESCONECTADA: { cls: 'bg-red-50 text-red-600 border border-red-200',             dot: '🔴', label: 'Desconectada' },
+            PENDENTE:     { cls: 'bg-amber-50 text-amber-700 border border-amber-200',        dot: '🟡', label: 'Pendente' },
+            ERRO:         { cls: 'bg-red-50 text-red-600 border border-red-200',              dot: '❌', label: 'Erro' },
+        };
+        return map[status] || { cls: 'bg-gray-50 text-gray-400 border border-gray-200', dot: '⚪', label: 'Não configurada' };
+    }
+
+    // ---- Modal ----
+    // ---- Tabs step 1 ----
+    function setTab(tab) {
+        const isUserCode = tab === 'userCode';
+        document.getElementById('painelUserCode').classList.toggle('hidden', !isUserCode);
+        document.getElementById('painelManual').classList.toggle('hidden', isUserCode);
+        document.getElementById('tabUserCode').className = `flex-1 py-2 text-xs font-semibold transition border-b-2 ${isUserCode ? 'text-red-600 border-red-500' : 'text-gray-400 border-transparent hover:text-gray-600'}`;
+        document.getElementById('tabManual').className   = `flex-1 py-2 text-xs font-semibold transition border-b-2 ${!isUserCode ? 'text-red-600 border-red-500' : 'text-gray-400 border-transparent hover:text-gray-600'}`;
+    }
+
+    function abrirModalConectar(empresaId, empresaNome) {
+        modalState = { empresaId, empresaNome, credencialId: null };
+        document.getElementById('empresaNome').textContent = empresaNome;
+        document.getElementById('inputMerchantId').value   = '';
+        document.getElementById('inputMerchantNome').value = '';
+        document.getElementById('inputAmbiente').value     = 'PRODUCAO';
+        document.getElementById('inputRefreshToken').value = '';
+        document.getElementById('inputAuthCode').value = '';
+        setTab('userCode');
+        irParaStep(1);
+        document.getElementById('modal').classList.remove('hidden');
+    }
+
+    function fecharModal() {
+        document.getElementById('modal').classList.add('hidden');
+    }
+
+    function irParaStep(n) {
+        [1, 2, 3].forEach(i => {
+            const el = document.getElementById(`step${i}`);
+            i === n ? el.classList.remove('hidden') : el.classList.add('hidden');
+        });
+        atualizarStepBar(n);
+    }
+
+    function atualizarStepBar(current) {
+        [1, 2, 3].forEach(i => {
+            const circle = document.getElementById(`step${i}Circle`);
+            circle.className = '';
+            if (i < current)  circle.className = 'step-circle-done';
+            else if (i === current) circle.className = 'step-circle-active';
+            else circle.className = 'step-circle-inactive';
+        });
+        const activeLine = (id, active) => {
+            const el = document.getElementById(id);
+            el.className = `flex-1 h-0.5 rounded ${active ? 'bg-red-400' : 'bg-gray-200'}`;
+        };
+        activeLine('line12', current >= 2);
+        activeLine('line23', current >= 3);
+    }
+
+    function voltarStep1() {
+        irParaStep(1);
+    }
+
+    // ---- Step 1 → solicitar código ----
+    async function solicitarCodigo() {
+        const merchantId   = document.getElementById('inputMerchantId').value.trim();
+        const merchantNome = document.getElementById('inputMerchantNome').value.trim();
+        const ambiente     = document.getElementById('inputAmbiente').value;
+
+        if (!merchantId) {
+            Swal.fire({ icon: 'warning', title: 'Campo obrigatório', text: 'Informe o Merchant ID da loja.', confirmButtonColor: '#ef4444' });
+            return;
+        }
+
+        const btn = document.getElementById('btnSolicitarCodigo');
+        btn.disabled = true;
+        btn.textContent = '⏳ Solicitando...';
+
+        try {
+            const resp = await fetch(`${BASE}/api/ifood/solicitar-codigo`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    empresa_id:    modalState.empresaId,
+                    merchant_id:   merchantId,
+                    merchant_nome: merchantNome,
+                    ambiente,
+                }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Erro desconhecido');
+
+            modalState.credencialId = data.credencialId;
+
+            // Preenche step 2
+            document.getElementById('userCodeDisplay').textContent = data.userCode;
+            document.getElementById('linkVerificacao').href = data.verificationUrl;
+            const expMin = Math.floor((data.expiresIn || 600) / 60);
+            document.getElementById('codigoExpira').textContent = `Expira em ${expMin} minutos`;
+            document.getElementById('pollStatus').classList.add('hidden');
+
+            irParaStep(2);
+        } catch (err) {
+            Swal.fire({ icon: 'error', title: 'Erro', text: err.message, confirmButtonColor: '#ef4444' });
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Solicitar código de autorização →';
+        }
+    }
+
+    // ---- Step 2 → verificar autorização ----
+    async function verificarAutorizacao() {
+        const authCode = document.getElementById('inputAuthCode').value.trim();
+        if (!authCode) {
+            Swal.fire({ icon: 'warning', title: 'Campo obrigatório', text: 'Cole o código de autorização que o iFood exibiu após a autorização.', confirmButtonColor: '#ef4444' });
+            return;
+        }
+
+        const btn = document.getElementById('btnJaAutorizei');
+        btn.disabled = true;
+        btn.textContent = '⏳ Verificando...';
+        document.getElementById('pollStatus').classList.remove('hidden');
+        document.getElementById('pollMsg').textContent = '⏳ Trocando código por token...';
+
+        try {
+            const resp = await fetch(`${BASE}/api/ifood/verificar-autorizacao`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ credencial_id: modalState.credencialId, authorization_code: authCode }),
+            });
+            const data = await resp.json();
+
+            if (!resp.ok) throw new Error(data.error || 'Erro desconhecido');
+
+            if (data.status === 'pending') {
+                document.getElementById('pollMsg').textContent = '⏳ ' + (data.message || 'Aguardando autorização no iFood...');
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Ainda não autorizado',
+                    text: 'O iFood ainda não registrou a autorização. Certifique-se de ter concluído o processo no portal do parceiro.',
+                    confirmButtonColor: '#ef4444',
+                });
+                return;
+            }
+
+            // Sucesso
+            document.getElementById('lojaConectadaNome').textContent = modalState.empresaNome;
+            irParaStep(3);
+        } catch (err) {
+            document.getElementById('pollMsg').textContent = '❌ ' + err.message;
+            Swal.fire({ icon: 'error', title: 'Erro', text: err.message, confirmButtonColor: '#ef4444' });
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '✅ Já autorizei';
+        }
+    }
+
+    // ---- Token manual ----
+    async function salvarTokenManual() {
+        const merchantId    = document.getElementById('inputMerchantId').value.trim();
+        const merchantNome  = document.getElementById('inputMerchantNome').value.trim();
+        const ambiente      = document.getElementById('inputAmbiente').value;
+        const refreshToken  = document.getElementById('inputRefreshToken').value.trim();
+
+        if (!merchantId || !refreshToken) {
+            Swal.fire({ icon: 'warning', title: 'Campos obrigatórios', text: 'Preencha o Merchant ID e o Refresh Token.', confirmButtonColor: '#ef4444' });
+            return;
+        }
+
+        const btn = document.getElementById('btnSalvarToken');
+        btn.disabled = true;
+        btn.textContent = '⏳ Salvando...';
+
+        try {
+            const resp = await fetch(`${BASE}/api/ifood/salvar-token-manual`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ empresa_id: modalState.empresaId, merchant_id: merchantId, merchant_nome: merchantNome, refresh_token: refreshToken, ambiente }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Erro desconhecido');
+
+            document.getElementById('lojaConectadaNome').textContent = modalState.empresaNome;
+            irParaStep(3);
+        } catch (err) {
+            Swal.fire({ icon: 'error', title: 'Erro', text: err.message, confirmButtonColor: '#ef4444' });
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Salvar e Conectar ✓';
+        }
+    }
+
+    // ---- Desconectar ----
+    async function desconectar(credencialId, nome) {
+        const confirm = await Swal.fire({
+            title: `Desconectar "${nome}"?`,
+            text: 'A loja deixará de sincronizar com o iFood. Você pode reconectar a qualquer momento.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Desconectar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#ef4444',
+        });
+        if (!confirm.isConfirmed) return;
+
+        try {
+            const resp = await fetch(`${BASE}/api/ifood/credencial/${credencialId}`, { method: 'DELETE' });
+            if (!resp.ok) throw new Error('Erro ao desconectar');
+            Swal.fire({ icon: 'success', title: 'Desconectado', text: `A loja "${nome}" foi desconectada.`, confirmButtonColor: '#ef4444', timer: 2000, showConfirmButton: false });
+            await carregarEmpresas();
+        } catch (err) {
+            mostrarErro(err.message);
+        }
+    }
+
+    // ---- Utilidades ----
+    function copiarCodigo() {
+        const code = document.getElementById('userCodeDisplay').textContent.trim();
+        navigator.clipboard.writeText(code).then(() => {
+            Swal.fire({ icon: 'success', title: 'Copiado!', text: code, timer: 1500, showConfirmButton: false });
+        });
+    }
+
+    function fmtDate(str) {
+        if (!str) return '—';
+        const d = new Date(str);
+        return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function fmtCnpj(cnpj) {
+        if (!cnpj) return '—';
+        const c = cnpj.replace(/\D/g, '');
+        if (c.length !== 14) return cnpj;
+        return c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+    }
+
+    function escapar(str) {
+        return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+
+    function mostrarErro(msg) {
+        Swal.fire({ icon: 'error', title: 'Erro', text: msg, confirmButtonColor: '#ef4444' });
+    }
+
+    // Fechar modal ao clicar fora
+    document.getElementById('modal').addEventListener('click', function(e) {
+        if (e.target === this) fecharModal();
+    });
+
+    // ---- Sync manual ----
+    async function rodarSyncManual() {
+        const btn = document.getElementById('btnSync');
+        btn.disabled = true;
+        btn.textContent = '⏳ Iniciando...';
+        try {
+            const resp = await fetch(`${BASE}/run/ifood-sync`, { method: 'POST' });
+            const data = await resp.json();
+            Swal.fire({
+                icon: 'success',
+                title: 'Sync iniciado!',
+                text: data.message,
+                confirmButtonColor: '#ef4444',
+                timer: 4000,
+                timerProgressBar: true,
+            });
+        } catch (err) {
+            Swal.fire({ icon: 'error', title: 'Erro', text: err.message, confirmButtonColor: '#ef4444' });
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '▶ Rodar Sync Agora';
+        }
+    }
+
+    // Carga inicial
+    carregarEmpresas();
+</script>
+</body>
+</html>

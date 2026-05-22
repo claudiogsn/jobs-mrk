@@ -18,6 +18,7 @@ const jobMap = {
     WorkerJobConferencia: require('../workers/workerPagamentos').WorkerJobConferencia,
     ExecuteJobSolicitacao: require( '../workers/workerSolicitacaoExtrato').ExecuteJobSolicitacao,
     ExecuteJobImportacao: require('../workers/workerImportacaoExtrato').ExecuteJobImportacao,
+    ExecuteJobIfoodSync: require('../workers/workerIfoodSync').ExecuteJobIfoodSync,
 
     // 🔧 Job de teste
     jobTesteLog: async () => {
