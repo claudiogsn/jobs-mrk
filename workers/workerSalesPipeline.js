@@ -7,6 +7,7 @@ const { log } = require('../utils/logger');
 const { processItemVenda } = require('./workerItemVenda');
 const { processConsolidation } = require('./workerConsolidateSales');
 const { ExecuteJobDocSaida } = require('./workerCreateDocSaida');
+const { ExecuteJobCaixa } = require('./workerMovimentoCaixa');
 
 function isValidYMD(s) {
     return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -41,7 +42,7 @@ async function runSalesPipeline({ group_id, dt_inicio, dt_fim }) {
     );
 
     // 1) Importar Itens Vendidos (intervalo completo)
-    log(`➡️ Etapa 1/3: Importar itens vendidos`, 'workerSalesPipeline');
+    log(`➡️ Etapa 1/4: Importar itens vendidos`, 'workerSalesPipeline');
     console.log('Passei do 01')
     await processItemVenda({
         group_id: gid,
@@ -50,7 +51,7 @@ async function runSalesPipeline({ group_id, dt_inicio, dt_fim }) {
     });
 
     // 2) Consolidar vendas por grupo (assinatura POSICIONAL)
-    log(`➡️ Etapa 2/3: Consolidar vendas`, 'workerSalesPipeline');
+    log(`➡️ Etapa 2/4: Consolidar vendas`, 'workerSalesPipeline');
     await processConsolidation(
         gid,
         start.toFormat('yyyy-MM-dd'),
@@ -58,11 +59,19 @@ async function runSalesPipeline({ group_id, dt_inicio, dt_fim }) {
     );
 
     // 3) Baixa de estoque por dia (a função já itera internamente)
-    log(`➡️ Etapa 3/3: Baixa de estoque`, 'workerSalesPipeline');
+    log(`➡️ Etapa 3/4: Baixa de estoque`, 'workerSalesPipeline');
     await ExecuteJobDocSaida(
         start.toFormat('yyyy-MM-dd'),
         end.toFormat('yyyy-MM-dd'),
         gid
+    );
+
+    // 3) Baixa de estoque por dia (a função já itera internamente)
+    log(`➡️ Etapa 4/4: Movimentos de Caixa`, 'workerSalesPipeline');
+    await ExecuteJobCaixa(
+        gid,
+        start.toFormat('yyyy-MM-dd'),
+        end.toFormat('yyyy-MM-dd')
     );
 
     log(`✅ Pipeline concluído para grupo ${gid}`, 'workerSalesPipeline');

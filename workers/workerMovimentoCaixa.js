@@ -185,16 +185,18 @@ async function processMovimentoCaixa({ group_id, dt_inicio, dt_fim } = {}) {
     }
 }
 
-async function ExecuteJobCaixa() {
+async function ExecuteJobCaixa(dt_inicio, dt_fim, group_id) {
     const hoje = DateTime.local();
     const ontem = hoje.minus({ days: 1 });
 
-    const dt_inicio = ontem.toFormat('yyyy-MM-dd');
-    const dt_fim = hoje.toFormat('yyyy-MM-dd');
+    dt_inicio = dt_inicio || ontem.toFormat('yyyy-MM-dd');
+    dt_fim    = dt_fim    || hoje.toFormat('yyyy-MM-dd');
 
     log(`⏱️ Iniciando job de ${dt_inicio} até ${dt_fim} às ${hoje.toFormat('HH:mm:ss')}`, 'workerMovimentoCaixa');
 
-    const grupos = await callPHP('getGroupsToProcess', {});
+    const grupos = group_id
+        ? [{ id: Number(group_id), nome: `Grupo ${group_id}` }]
+        : await callPHP('getGroupsToProcess', {});
 
     if (!Array.isArray(grupos) || grupos.length === 0) {
         log('⚠️ Nenhum grupo encontrado para processar.', 'workerMovimentoCaixa');
@@ -202,10 +204,10 @@ async function ExecuteJobCaixa() {
     }
 
     for (const grupo of grupos) {
-        const group_id = grupo.id;
-        const nomeGrupo = grupo.nome;
-        log(`🚀 Processando grupo: ${nomeGrupo} (ID: ${group_id})`, 'workerMovimentoCaixa');
-        await processMovimentoCaixa({ group_id, dt_inicio, dt_fim });
+        const gid = grupo.id ?? grupo;
+        const nomeGrupo = grupo.nome || `Grupo ${gid}`;
+        log(`🚀 Processando grupo: ${nomeGrupo} (ID: ${gid})`, 'workerMovimentoCaixa');
+        await processMovimentoCaixa({ group_id: gid, dt_inicio, dt_fim });
     }
 
     log(`🏁 Job finalizado às ${hoje.toFormat('HH:mm:ss')}`, 'workerMovimentoCaixa');
