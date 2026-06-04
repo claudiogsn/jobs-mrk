@@ -76,10 +76,10 @@ async function gerarFilaWhatsappCMV() {
         corpoMensagem += `📍 *${lojaAtual.nomeLoja}*\n`;
         corpoMensagem += `💰 Faturamento: *${formatCurrency(lojaAtual.faturamento_bruto)}* [Vs ${formatCurrency(anterior.faturamento_bruto || 0)}]\n`;
         corpoMensagem += `🛒 Compras: *${formatCurrency(lojaAtual.total_compras)}* [Vs ${formatCurrency(anterior.total_compras || 0)}]\n`;
-        corpoMensagem += `📊 %CMV: *${lojaAtual.percentual_cmv.toFixed(2)}%* [Vs ${(anterior.percentual_cmv || 0).toFixed(2)}%]\n`;
+        corpoMensagem += `📊 %CMC: *${lojaAtual.percentual_cmv.toFixed(2)}%* [Vs ${(anterior.percentual_cmv || 0).toFixed(2)}%]\n`;
         corpoMensagem += ` \n`;
         corpoMensagem += `Variação Faturamento: ${calcularVariacao(lojaAtual.faturamento_bruto, anterior.faturamento_bruto || 0)}\n`;
-        corpoMensagem += `Variação %CMV: ${calcularVariacao(lojaAtual.percentual_cmv, anterior.percentual_cmv || 0)}\n`;
+        corpoMensagem += `Variação %CMC: ${calcularVariacao(lojaAtual.percentual_cmv, anterior.percentual_cmv || 0)}\n`;
         corpoMensagem += `Variação Compras: ${calcularVariacao(lojaAtual.total_compras, anterior.total_compras || 0)}\n`;
         corpoMensagem += `━━━━━━━━━━━━━━━━━━━\n`;
 
@@ -99,11 +99,11 @@ async function gerarFilaWhatsappCMV() {
 
     corpoMensagem += `📊 *Consolidado Geral*\n`;
     corpoMensagem += `💰 Faturamento: *${formatCurrency(soma.atual.faturamento)}* [Vs ${formatCurrency(soma.anterior.faturamento)}]\n`;
-    corpoMensagem += `📊 %CMV: *${percentualCmvAtual.toFixed(2)}%* [Vs ${percentualCmvAnterior.toFixed(2)}%]\n`;
+    corpoMensagem += `📊 %CMC: *${percentualCmvAtual.toFixed(2)}%* [Vs ${percentualCmvAnterior.toFixed(2)}%]\n`;
     corpoMensagem += `🛒 Compras: *${formatCurrency(soma.atual.compras)}* [Vs ${formatCurrency(soma.anterior.compras)}]\n`;
     corpoMensagem += `\n`;
     corpoMensagem += `Variação Faturamento: ${calcularVariacao(soma.atual.faturamento, soma.anterior.faturamento)}\n`;
-    corpoMensagem += `Variação %CMV: ${calcularVariacao(percentualCmvAtual, percentualCmvAnterior)}\n`;
+    corpoMensagem += `Variação %CMC: ${calcularVariacao(percentualCmvAtual, percentualCmvAnterior)}\n`;
     corpoMensagem += `Variação Compras: ${calcularVariacao(soma.atual.compras, soma.anterior.compras)}\n`;
 
     for (const destinatario of DESTINOS) {

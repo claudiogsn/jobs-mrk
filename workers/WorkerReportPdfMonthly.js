@@ -101,11 +101,11 @@ Segue resumo mensal do *${grupoNome}*, referente a ${dataInicioStr} a ${dataFimS
 
 💰 Faturamento: ${formatCurrency(rAtual.faturamento_bruto)} [Vs ${formatCurrency(rAnt.faturamento_bruto)}]
 🛒 Compras: ${formatCurrency(comprasAtual)} [Vs ${formatCurrency(comprasAnterior)}]
-📊 %CMV: ${percentualCMV.toFixed(2)}% [Vs ${percentualCMVAnterior.toFixed(2)}%]
+📊 %CMC: ${percentualCMV.toFixed(2)}% [Vs ${percentualCMVAnterior.toFixed(2)}%]
 
 Variação Faturamento: ${calcularVariacaoSemBola(rAtual.faturamento_bruto, rAnt.faturamento_bruto)}
 Variação Compras: ${calcularVariacaoSemBola(comprasAtual, comprasAnterior)}
-Variação %CMV: ${calcularVariacaoReverse(percentualCMV, percentualCMVAnterior)}
+Variação %CMC: ${calcularVariacaoReverse(percentualCMV, percentualCMVAnterior)}
 ━━━━━━━━━━━━━━━━━━━
 
 O PDF com os detalhes será enviado a seguir.
