@@ -43,7 +43,6 @@ async function runSalesPipeline({ group_id, dt_inicio, dt_fim }) {
 
     // 1) Importar Itens Vendidos (intervalo completo)
     log(`➡️ Etapa 1/4: Importar itens vendidos`, 'workerSalesPipeline');
-    console.log('Passei do 01')
     await processItemVenda({
         group_id: gid,
         dt_inicio: start.toFormat('yyyy-MM-dd'),
@@ -66,12 +65,13 @@ async function runSalesPipeline({ group_id, dt_inicio, dt_fim }) {
         gid
     );
 
-    // 3) Baixa de estoque por dia (a função já itera internamente)
+    // 4) Movimentos de Caixa (a função já itera internamente)
+    // Assinatura correta: ExecuteJobCaixa(dt_inicio, dt_fim, group_id)
     log(`➡️ Etapa 4/4: Movimentos de Caixa`, 'workerSalesPipeline');
     await ExecuteJobCaixa(
-        gid,
         start.toFormat('yyyy-MM-dd'),
-        end.toFormat('yyyy-MM-dd')
+        end.toFormat('yyyy-MM-dd'),
+        gid
     );
 
     log(`✅ Pipeline concluído para grupo ${gid}`, 'workerSalesPipeline');

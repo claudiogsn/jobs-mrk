@@ -99,7 +99,7 @@ function loadLogoBase64() {
         const img = fs.readFileSync(logoPath);
         return 'data:image/png;base64,' + img.toString('base64');
     } catch (e) {
-        console.error('Erro ao carregar logo.png:', e.message);
+        log(`❌ Erro ao carregar logo.png: ${e.message}`, 'workerCopReport');
         return null;
     }
 }
@@ -427,11 +427,10 @@ function montarMensagemAuditoria(contatoNome, unitName, dataRefISO, itens) {
  * - options: { dt_inicio?, dt_fim? }
  */
 async function enviarAuditoriaCop(contato, grupo) {
-    console.log(`[COP] ${contato} (${grupo})`);
     const { nome, telefone } = contato;
     const grupoId = grupo.id;
     const grupoNome = grupo.nome;
-    console.log(`passei`)
+    log(`[COP] Iniciando auditoria — grupo ${grupoNome} (${grupoId})`, 'workerCopReport');
 
 
 

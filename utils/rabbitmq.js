@@ -9,6 +9,11 @@ const QUEUES = {
     TELEMETRIA: process.env.RABBITMQ_QUEUE_TELEMETRIA || 'telemetria_logs',
 };
 
+// Exchanges fanout (pub/sub) — usados para sinais entre processos desacoplados.
+const EXCHANGES = {
+    CRON_RELOAD: 'cron.reload',
+};
+
 let connection = null;
 let channel = null;
 let reconnecting = false;
@@ -126,6 +131,40 @@ async function consumeFromQueue(queue, handler, options = {}) {
 }
 
 /**
+ * Publica uma mensagem num exchange fanout (broadcast para todos os inscritos).
+ * Usado, por exemplo, para sinalizar reload de cron entre processos.
+ */
+async function publishFanout(exchange, payload = {}) {
+    const ch = await getChannel();
+    await ch.assertExchange(exchange, 'fanout', { durable: false });
+    ch.publish(exchange, '', Buffer.from(JSON.stringify(payload)));
+}
+
+/**
+ * Inscreve um handler num exchange fanout (fila exclusiva/efêmera por processo).
+ * Cada processo inscrito recebe uma cópia da mensagem.
+ */
+async function subscribeFanout(exchange, handler) {
+    const ch = await getChannel();
+    await ch.assertExchange(exchange, 'fanout', { durable: false });
+    const { queue } = await ch.assertQueue('', { exclusive: true });
+    await ch.bindQueue(queue, exchange, '');
+
+    ch.consume(queue, async (msg) => {
+        if (!msg) return;
+        try {
+            const payload = JSON.parse(msg.content.toString() || '{}');
+            await handler(payload);
+        } catch (err) {
+            log(`❌ Erro no handler do fanout "${exchange}": ${err.message}`, 'rabbitmq');
+        }
+        ch.ack(msg);
+    });
+
+    log(`👂 Inscrito no exchange fanout "${exchange}"`, 'rabbitmq');
+}
+
+/**
  * Fecha conexão (para graceful shutdown)
  */
 async function closeConnection() {
@@ -143,9 +182,12 @@ async function closeConnection() {
 
 module.exports = {
     QUEUES,
+    EXCHANGES,
     connect,
     getChannel,
     publishToQueue,
     consumeFromQueue,
+    publishFanout,
+    subscribeFanout,
     closeConnection,
 };

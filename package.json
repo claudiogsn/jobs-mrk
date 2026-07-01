@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "description": "Workers para integração com o sistemas externos ao Portal MRK",
   "main": "index.js",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "start": "node index.js",
+    "start": "node -r dotenv/config -r @mrksolucoes/observability/register index.js",
+    "start:legacy": "node index.js",
     "worker:financeiro": "node workers/workerFinanceiro.js",
     "worker:consolidate": "node workers/workerConsolidateSales.js",
     "worker:docsaida": "node workers/workerCreateDocSaida.js",
@@ -12,6 +16,7 @@
     "worker:caixa": "node workers/workerMovimentoCaixa.js"
   },
   "dependencies": {
+    "@mrksolucoes/observability": "*",
     "amqplib": "^1.0.2",
     "axios": "^1.13.2",
     "cors": "^2.8.5",

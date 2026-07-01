@@ -1,7 +1,7 @@
-const path = require('path');
-require('dotenv').config({ path: path.resolve('../.env') });
+require('dotenv').config();
 
 const { log } = require('../utils/logger');
+const { getLogger } = require('@mrksolucoes/observability');
 const { DateTime } = require('luxon');
 const { callMenew, loginMenew, callPHP} = require('../utils/utils');
 const mysql = require('mysql2/promise');
@@ -40,7 +40,8 @@ const ajustarDateTime = (str) => {
 
 async function buscarMeiosPagamentoAPI(lojaId, token) {
     const url = `https://batech.portalmenew.com.br/terceiros/restful/meios-pagamento?lojas=${lojaId}&ativo=1&Authorization=${token}`;
-    console.log(url);
+    // Não logar a URL crua (contém o token na query string).
+    log(`🔎 Buscando meios de pagamento da loja ${lojaId}`, 'workerPagamentos');
 
     const response = await fetch(url);
     if (!response.ok) {
@@ -258,17 +259,14 @@ async function ExecuteJobConferencia({ group_id, data } = {}) {
         dateStrings: true
     };
 
-    console.log('🔌 Tentando conectar ao banco com as configurações:', {
-        ...dbConfig,
-        password: dbConfig.password ? '******' : 'UNDEFINED (VERIFIQUE O .ENV)'
-    });
+    log(`🔌 Conectando ao banco (${dbConfig.host}/${dbConfig.database}) | senha: ${dbConfig.password ? 'definida' : 'UNDEFINED (VERIFIQUE O .ENV)'}`, 'workerConferencia');
 
     let conn;
     try {
         conn = await mysql.createConnection(dbConfig);
-        console.log(`✅ Conexão bem sucedida! Thread ID: ${conn.threadId}`);
+        log(`✅ Conexão bem sucedida! Thread ID: ${conn.threadId}`, 'workerConferencia');
     } catch (e) {
-        console.error('❌ ERRO AO CONECTAR NO BANCO:', e.message);
+        getLogger().error(e, { contexto: 'conectar ao banco (workerConferencia)' });
         throw e;
     }
 

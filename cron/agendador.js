@@ -1,6 +1,8 @@
 const cron = require('node-cron');
 const { log } = require('../utils/logger');
 const { getConnection } = require('../utils/utils');
+const { runWithExecution } = require('@mrksolucoes/observability');
+const { subscribeFanout, EXCHANGES } = require('../utils/rabbitmq');
 
 const jobMap = {
     ExecuteJobCaixa: require('../workers/workerMovimentoCaixa').ExecuteJobCaixa,
@@ -22,8 +24,7 @@ const jobMap = {
 
     // 🔧 Job de teste
     jobTesteLog: async () => {
-        const now = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-        console.log(`[${now}] 💡 Job de teste executado com sucesso!`);
+        log('💡 Job de teste executado com sucesso!', 'CronJob');
     }
 };
 
@@ -51,7 +52,13 @@ async function agendarJobsDinamicos() {
             const task = cron.schedule(job.cron_expr, async () => {
                 log(`⏰ Executando: ${job.nome}`, 'CronJob');
                 try {
-                    await metodoFn();
+                    // Envelope de observabilidade: executionId + início/fim/duração/erro
+                    // + span raiz do job. Re-lança em erro (tratado abaixo p/ disparos_logs).
+                    await runWithExecution(
+                        job.metodo,
+                        () => metodoFn(),
+                        { jobId: job.id, metadata: { nome: job.nome, cron: job.cron_expr } }
+                    );
 
                     const innerConn = await getConnection();
                     await innerConn.query('UPDATE disparos SET ultima_execucao = NOW() WHERE id = ?', [job.id]);
@@ -87,4 +94,20 @@ async function agendarJobsDinamicos() {
     log(`✅ Todos os cron jobs foram carregados com sucesso.`, 'CronJob');
 }
 
-module.exports = { agendarJobsDinamicos };
+/**
+ * Escuta o sinal de reload (exchange fanout) e recarrega os jobs sem reiniciar o
+ * processo. Permite que a rota /reload-cron (no processo da API) recarregue o
+ * agendador mesmo quando ele roda em outro processo.
+ */
+async function iniciarListenerReload() {
+    try {
+        await subscribeFanout(EXCHANGES.CRON_RELOAD, async () => {
+            log('🔄 Sinal de reload recebido — recarregando cron jobs...', 'CronJob');
+            await agendarJobsDinamicos();
+        });
+    } catch (err) {
+        log(`⚠️ Não foi possível iniciar o listener de reload: ${err.message}`, 'CronJob');
+    }
+}
+
+module.exports = { agendarJobsDinamicos, iniciarListenerReload };

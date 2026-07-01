@@ -1,20 +1,25 @@
-const { DateTime } = require('luxon');
+/**
+ * Adapter de compatibilidade.
+ *
+ * Mantém a assinatura histórica `log(message, workerName)` usada em toda a base,
+ * mas delega para o logger central de @mrksolucoes/observability (Pino/JSON +
+ * correlação + export OTLP). Assim nenhum dos chamadores existentes precisa mudar.
+ *
+ * `getLogs()` continua devolvendo um buffer em memória dos últimos logs (consumido
+ * pela rota /jobs/stdout e pelo dashboard), preservando o comportamento atual.
+ */
 
+const { getLogger } = require('@mrksolucoes/observability');
+
+const logger = getLogger();
 const logs = [];
+const MAX = 2000;
 
 function log(message, workerName = 'worker') {
-    const timestamp = DateTime.now()
-        .setZone('America/Fortaleza')
-        .toFormat('yyyy-MM-dd HH:mm:ss');
+    logger.info(message, { worker: workerName });
 
-    const fullMessage = `[${workerName}] - ${message}`;
-
-    console.log(fullMessage);
-
-    logs.push(fullMessage);
-    if (logs.length > 2000) {
-        logs.shift();
-    }
+    logs.push(`[${workerName}] - ${message}`);
+    if (logs.length > MAX) logs.shift();
 }
 
 function getLogs() {

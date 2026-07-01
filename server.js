@@ -3,9 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const { getLogs,log} = require('./utils/logger');
+const { getLogger, requestContextMiddleware } = require('@mrksolucoes/observability');
 const { sendWhatsappText, getConnection } = require('./utils/utils');
 const { appendApiLog } = require('./utils/apiLogger');
 const axios = require('axios');
+
+const logger = getLogger();
 
 const { processItemVenda } = require('./workers/workerItemVenda');
 const { processConsolidation } = require('./workers/workerConsolidateSales');
@@ -16,7 +19,7 @@ const { processJobCaixaZig } = require('./workers/workerBillingZig');
 const { ProcessJobStockZig, ExecuteJobStockZig} = require('./workers/workerStockZig');
 const { processConsolidationStock } = require('./workers/WorkerConsolidationStock');
 
-const { agendarJobsDinamicos } = require('./cron/agendador');
+const { publishFanout, EXCHANGES } = require('./utils/rabbitmq');
 
 const { enviarResumoDiario, WorkerResumoDiario} = require('./workers/WorkerDisparoFaturamento');
 const { enviarResumoSemanal, WorkerReportPdfWeekly } = require('./workers/WorkerReportPdfWeekly');
@@ -40,12 +43,11 @@ const {DateTime} = require("luxon");
 const app = express();
 const router = express.Router();
 const PORT = process.env.PORT || 3005;
-const liveLogs = [];
-const MAX_LOGS = 1000;
-const originalLog = console.log;
 const REPORTS_DIR = path.join(__dirname, 'workers', 'reports');
 
 app.use(express.json());
+// Contexto de requisição: requestId/correlationId + trace/span + log de entrada/saída.
+app.use(requestContextMiddleware);
 
 
 const formatDate = (dataISO) => {
@@ -68,18 +70,6 @@ router.get('/logo.png', (req, res) => {
 
 router.use('/reports', express.static(REPORTS_DIR));
 
-
-console.log = (...args) => {
-    const timestamp = new Date().toLocaleString('pt-BR', {
-        timeZone: 'America/Fortaleza',
-        hour12: false
-    }).replace(',', '');
-
-    const msg = `[${timestamp}] ${args.join(' ')}`;
-    liveLogs.push(msg);
-    if (liveLogs.length > MAX_LOGS) liveLogs.shift();
-    originalLog(msg);
-};
 
 // === API Explorer Dinâmico ===
 router.get('/api/explorer-data', (req, res) => {
@@ -124,7 +114,7 @@ router.get('/explorer', (req, res) => {
 });
 
 router.post('/api/extratos/sincronizar', async (req, res) => {
-    console.log(JSON.stringify(req.body));
+    logger.debug('Sincronização de extratos: body recebido', { body: req.body });
     try {
 
         const { system_unit_id, dt_inicio, dt_fim, user_id } = req.body;
@@ -146,8 +136,8 @@ router.post('/api/extratos/sincronizar', async (req, res) => {
 
 
         ExecuteJobSolicitacao(payloadWorker)
-            .then(() => console.log(`Job Manual de Extrato iniciado com sucesso para Unidade: ${system_unit_id}`))
-            .catch(err => console.error(`Erro no Job Manual de Extrato:`, err));
+            .then(() => logger.info(`Job Manual de Extrato iniciado para Unidade: ${system_unit_id}`, { system_unit_id }))
+            .catch(err => logger.error(err, { rota: '/api/extratos/sincronizar', system_unit_id }));
 
         return res.status(200).json({
             success: true,
@@ -155,7 +145,7 @@ router.post('/api/extratos/sincronizar', async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Erro ao chamar a rota de sincronização:", error);
+        logger.error(error, { rota: '/api/extratos/sincronizar' });
         return res.status(500).json({
             success: false,
             message: "Erro interno no servidor ao tentar iniciar a sincronização."
@@ -168,8 +158,8 @@ router.post('/api/extratos/processar-pendentes', async (req, res) => {
     try {
 
         ExecuteJobImportacao()
-            .then(() => console.log(`Job Manual de Importação finalizado com sucesso.`))
-            .catch(err => console.error(`Erro no Job Manual de Importação:`, err));
+            .then(() => logger.info('Job Manual de Importação finalizado com sucesso.'))
+            .catch(err => logger.error(err, { rota: '/api/extratos/processar-pendentes' }));
 
         return res.status(200).json({
             success: true,
@@ -177,7 +167,7 @@ router.post('/api/extratos/processar-pendentes', async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Erro ao chamar a rota de processamento:", error);
+        logger.error(error, { rota: '/api/extratos/processar-pendentes' });
         return res.status(500).json({
             success: false,
             message: "Erro interno no servidor ao tentar iniciar o processamento."
@@ -264,7 +254,7 @@ router.post('/run/resumo-diario', async (req, res) => {
                 status: enviado ? 'enviado' : 'sem dados',
             });
         } catch (error) {
-            console.error(`Erro no dia ${dataDia}:`, error);
+            logger.error(error, { rota: '/run/resumo-diario', dia: dataDia });
             resultados.push({
                 data: dataDia || 'padrão (ontem)',
                 status: 'erro',
@@ -424,7 +414,7 @@ router.post('/run/consolidacao-estoque', async (req, res) => {
             `✅ Consolidação de estoque executada para o grupo ${group_id} de ${dt_inicio} até ${dt_fim}`
         );
     } catch (err) {
-        console.error(err);
+        logger.error(err, { rota: '/run/consolidacao-estoque', group_id });
         return res
             .status(500)
             .send(`❌ Erro ao executar consolidação de estoque: ${err.message}`);
@@ -612,10 +602,11 @@ router.post('/run/fluxo-estoque', async (req, res) => {
 // === Jobs Dinâmicos ===
 router.post('/reload-cron', async (req, res) => {
     try {
-        await agendarJobsDinamicos();
-        res.send('🔄 Jobs recarregados com sucesso!');
+        // Sinaliza o scheduler (mesmo processo ou processo separado) via fanout.
+        await publishFanout(EXCHANGES.CRON_RELOAD, { at: Date.now() });
+        res.send('🔄 Sinal de reload enviado ao agendador!');
     } catch (err) {
-        log(`❌ Erro ao recarregar jobs: ${err.message}`, 'CronJob');
+        log(`❌ Erro ao sinalizar reload de jobs: ${err.message}`, 'CronJob');
         res.status(500).send('Erro ao recarregar jobs.');
     }
 });
@@ -631,7 +622,7 @@ router.get('/logs', (req, res) => {
 });
 
 router.get('/stdout', (req, res) => {
-    res.json(liveLogs);
+    res.json(getLogs());
 });
 
 // === Autenticação ===

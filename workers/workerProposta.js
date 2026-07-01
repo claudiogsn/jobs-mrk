@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const PdfPrinter = require('pdfmake');
 const axios = require('axios');
+const { log } = require('../utils/logger');
+const { getLogger } = require('@mrksolucoes/observability');
 
 /**
  * ======================================================
@@ -245,7 +247,7 @@ function loadLogo() {
  */
 async function generateBioneProposalNode(propostaId, showPrice = true) {
     try {
-        console.log(`[1/3] Buscando dados da proposta ${propostaId}...`);
+        log(`[1/3] Buscando dados da proposta ${propostaId}...`, 'workerProposta');
         const response = await axios.get(`http://localhost/proposta-bione/get_proposal.php?id=${propostaId}`);
         const data = response.data;
 
@@ -430,7 +432,7 @@ async function generateBioneProposalNode(propostaId, showPrice = true) {
             ]
         };
 
-        console.log(`[2/3] Gerando PDF...`);
+        log(`[2/3] Gerando PDF...`, 'workerProposta');
         const pdfDoc = printer.createPdfKitDocument(docDefinition);
         const reportsDir = path.join(__dirname, 'reports');
         if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir);
@@ -439,10 +441,10 @@ async function generateBioneProposalNode(propostaId, showPrice = true) {
         pdfDoc.pipe(fs.createWriteStream(path.join(reportsDir, fileName)));
         pdfDoc.end();
 
-        console.log(`✅ [3/3] Sucesso! PDF salvo em: reports/${fileName}`);
+        log(`✅ [3/3] Sucesso! PDF salvo em: reports/${fileName}`, 'workerProposta');
 
     } catch (err) {
-        console.error("❌ Erro fatal:", err.message);
+        getLogger().error(err, { worker: 'workerProposta', propostaId });
     }
 }
 

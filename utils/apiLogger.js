@@ -2,6 +2,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+const { getLogger } = require('@mrksolucoes/observability');
 
 const LOG_DIR = path.resolve(__dirname, '../logs');
 
@@ -24,6 +25,12 @@ function appendApiLog(filename, content) {
     }
 
     fs.appendFileSync(logPath, logEntry);
+
+    // Espelha no logger estruturado (correlacionado por trace/execução) sem
+    // remover o arquivo legado. Candidato a deprecação assim que o SigNoz consolidar.
+    try {
+        getLogger().debug(`[api:${filename}] ${content}`, { integration: filename });
+    } catch (_) { /* nunca deixar o log derrubar o fluxo */ }
 }
 
 module.exports = {

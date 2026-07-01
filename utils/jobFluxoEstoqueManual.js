@@ -1,5 +1,7 @@
 require('dotenv').config();
 const mysql = require('mysql2/promise');
+const { log } = require('./logger');
+const { getLogger } = require('@mrksolucoes/observability');
 
 const dtInicio = '2025-05-16';
 const dtFim = '2025-05-31';
@@ -38,7 +40,7 @@ async function main() {
   `);
 
     for (const loja of lojas) {
-        console.log(`\n🚀 Iniciando processamento da loja: ${loja.name} (${loja.system_unit_id})`);
+        log(`🚀 Iniciando processamento da loja: ${loja.name} (${loja.system_unit_id})`, 'jobFluxoEstoqueManual');
         const inicioLoja = Date.now();
 
         const [produtos] = await conn.execute(`
@@ -51,24 +53,24 @@ async function main() {
         const chunks = chunkArray(produtos, CHUNK_SIZE);
 
         for (const [index, chunk] of chunks.entries()) {
-            console.log(`  ⚙️  Processando chunk ${index + 1}/${chunks.length} (${chunk.length} produtos)...`);
+            log(`⚙️ Processando chunk ${index + 1}/${chunks.length} (${chunk.length} produtos)...`, 'jobFluxoEstoqueManual');
 
             await Promise.all(
                 chunk.map(produto =>
                     processarProduto(conn, loja.system_unit_id, produto)
                         .then(() => {
                             totalProdutos++;
-                            console.log(`    ✅ Produto ${produto.codigo} OK`);
+                            log(`✅ Produto ${produto.codigo} OK`, 'jobFluxoEstoqueManual');
                         })
                         .catch(err => {
-                            console.error(`    ❌ Produto ${produto.codigo} ERRO: ${err.message}`);
+                            getLogger().error(err, { worker: 'jobFluxoEstoqueManual', produto: produto.codigo });
                         })
                 )
             );
         }
 
         const duracao = ((Date.now() - inicioLoja) / 1000).toFixed(2);
-        console.log(`✅ Loja ${loja.name} finalizada — ${totalProdutos} produtos processados em ${duracao} segundos`);
+        log(`✅ Loja ${loja.name} finalizada — ${totalProdutos} produtos processados em ${duracao} segundos`, 'jobFluxoEstoqueManual');
     }
 
     await conn.end();
@@ -142,6 +144,6 @@ async function processarProduto(conn, system_unit_id, produto) {
 }
 
 main().catch(err => {
-    console.error('❌ Erro geral:', err.message);
+    getLogger().fatal(err, { worker: 'jobFluxoEstoqueManual', contexto: 'erro geral' });
     process.exit(1);
 });

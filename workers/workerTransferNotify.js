@@ -46,7 +46,7 @@ function loadLogoBase64() {
         const img = fs.readFileSync(logoPath);
         return 'data:image/png;base64,' + img.toString('base64');
     } catch (e) {
-        console.error('Erro ao carregar logo.png:', e.message);
+        log(`❌ Erro ao carregar logo.png: ${e.message}`, 'workerTransferNotify');
         return null;
     }
 }
