@@ -62,13 +62,15 @@ async function enviarResumoDiario(contato, grupo, dataEspecifica = null) {
     for (const unidade of unidades) {
         const { custom_code, name: unitName } = unidade;
 
-        const resumoOntem = await callPHP('generateResumoFinanceiroPorLoja', {
-            lojaid: custom_code, dt_inicio, dt_fim
-        });
+        const [resumoOntem, resumoSemanaPassada] = await Promise.all([
+            callPHP('generateResumoFinanceiroPorLoja', {
+                lojaid: custom_code, dt_inicio, dt_fim
+            }),
+            callPHP('generateResumoFinanceiroPorLoja', {
+                lojaid: custom_code, dt_inicio: dt_inicio_anterior, dt_fim: dt_fim_anterior
+            })
+        ]);
 
-        const resumoSemanaPassada = await callPHP('generateResumoFinanceiroPorLoja', {
-            lojaid: custom_code, dt_inicio: dt_inicio_anterior, dt_fim: dt_fim_anterior
-        });
 
         if (!resumoOntem || !resumoSemanaPassada) {
             log(`⚠️ Sem resumo para ${unitName}`, 'enviarResumoDiario');

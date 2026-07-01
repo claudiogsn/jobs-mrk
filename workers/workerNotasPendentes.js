@@ -26,7 +26,7 @@ async function enviarNotasPendentes(contato, grupo) {
     let corpoMensagem = `Segue abaixo as notas fiscais de *entrada não importadas* dos últimos 30 dias para o grupo *${grupoNome}*:\n\n━━━━━━━━━━━━━━━━━━━\n`;
     let totalNotasPendentesGeral = 0;
 
-    for (const unidade of unidades) {
+    const promessas = unidades.map(async (unidade) => {
         const systemUnitId = unidade.system_unit_id;
         const unitName = unidade.name || unidade.nome || unidade.descricao || `Unidade ${systemUnitId}`;
 
@@ -34,6 +34,12 @@ async function enviarNotasPendentes(contato, grupo) {
             system_unit_id: systemUnitId
         });
 
+        return { unidade, resp, unitName };
+    });
+
+    const resultados = await Promise.all(promessas);
+
+    for (const { unidade, resp, unitName } of resultados) {
         if (!resp || !resp.success) {
             log(`⚠️ Falha ao consultar notas pendentes da unidade ${unitName}: ${resp?.message || 'sem mensagem'}`, 'WorkerNotasPendentes');
             continue;
@@ -63,6 +69,7 @@ async function enviarNotasPendentes(contato, grupo) {
 
         corpoMensagem += `\n━━━━━━━━━━━━━━━━━━━\n`;
     }
+
 
     if (totalNotasPendentesGeral === 0) {
         log(`✅ Nenhuma nota pendente encontrada para ${nome} / grupo ${grupoNome}. Mensagem não enviada.`, 'WorkerNotasPendentes');

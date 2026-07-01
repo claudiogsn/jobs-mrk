@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { log } = require('../utils/logger');
+const { getLogger } = require('@mrksolucoes/observability');
 const { DateTime } = require('luxon');
 const axios = require('axios');
 const { appendApiLog } = require('../utils/apiLogger');
@@ -52,15 +53,40 @@ async function callMenew(methodPayload, token) {
     }
 }
 
+const phpCache = new Map();
+const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutos de TTL para requisições idênticas na mesma execução
+
 async function callPHP(method, data) {
     const token = process.env.MRK_TOKEN;
     const payload = { method, token, data };
+
+    // Apenas cacheia operações de leitura pura
+    const isCacheable = method.startsWith('get') || method.startsWith('listar') || method.startsWith('generate');
+    const cacheKey = `${method}:${JSON.stringify(data || {})}`;
+
+    if (isCacheable && phpCache.has(cacheKey)) {
+        const cached = phpCache.get(cacheKey);
+        if (Date.now() - cached.timestamp < CACHE_TTL_MS) {
+            appendApiLog('php_backend', `⚡ CACHE HIT (${method}): ${cacheKey}`);
+            return cached.data;
+        } else {
+            phpCache.delete(cacheKey);
+        }
+    }
 
     appendApiLog('php_backend', `➡️ REQUEST: ${method} - ${JSON.stringify(payload)} - URL: ${process.env.BACKEND_URL}`);
 
     try {
         const response = await axios.post(process.env.BACKEND_URL, payload);
         appendApiLog('php_backend', `✅ RESPONSE (${method}): ${JSON.stringify(response.data)} - URL: ${process.env.BACKEND_URL}`);
+
+        if (isCacheable && response && response.data) {
+            phpCache.set(cacheKey, {
+                timestamp: Date.now(),
+                data: response.data
+            });
+        }
+
         return response.data;
     } catch (error) {
         const errorContent = error.response?.data || error.message || 'Erro desconhecido';
@@ -68,6 +94,7 @@ async function callPHP(method, data) {
         return null;
     }
 }
+
 
 async function loginMenew() {
     const payload = {
@@ -145,13 +172,37 @@ async function sendWhatsappPdf(telefone, url) {
     }
 }
 
+let pool = null;
+
+/** Pool de conexões singleton (criado sob demanda). */
+function getPool() {
+    if (!pool) {
+        pool = mysql.createPool({
+            host: process.env.DB_HOST,
+            user: process.env.DB_USER,
+            password: process.env.DB_PASS,
+            database: process.env.DB_NAME,
+            waitForConnections: true,
+            connectionLimit: Number(process.env.DB_POOL_LIMIT || 10),
+            queueLimit: 0,
+            enableKeepAlive: true,
+        });
+    }
+    return pool;
+}
+
+/**
+ * Retorna uma conexão do pool.
+ *
+ * Compatibilidade: a base histórica faz `conn.end()` para liberar a conexão.
+ * Numa pool connection o mysql2 já redireciona end()→release(), mas emitindo um
+ * warning de deprecação a cada chamada. Sobrescrevemos `end` para devolver ao pool
+ * silenciosamente — assim nenhum dos ~18 chamadores precisa mudar.
+ */
 async function getConnection() {
-    return mysql.createConnection({
-        host: process.env.DB_HOST,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASS,
-        database: process.env.DB_NAME
-    });
+    const conn = await getPool().getConnection();
+    conn.end = conn.release.bind(conn);
+    return conn;
 }
 
 async function callTecnoSpeed(systemUnitId, axiosConfig) {
@@ -226,7 +277,7 @@ async function callTecnoSpeed(systemUnitId, axiosConfig) {
             executionTimeMs
         ]);
     } catch (logError) {
-        console.error(`❌ Erro ao salvar log de integração da Tecnospeed no BD:`, logError.message);
+        getLogger().error(logError, { contexto: 'salvar log de integração Tecnospeed no BD' });
     } finally {
         if (conn) await conn.end();
     }
@@ -249,6 +300,7 @@ module.exports = {
     sendWhatsappText,
     sendWhatsappPdf,
     getConnection,
+    getPool,
     calcularVariacaoReverse,
     calcularVariacaoSemBola,
     callTecnoSpeed
