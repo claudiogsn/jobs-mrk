@@ -382,24 +382,33 @@ async function run(importId) {
             ]);
         }
 
-        // 7.5. Registra produtos faltantes em alertas
+        // 7.5. Registra produtos faltantes em alertas (como notificações do Adianti)
         log(`[3LM Import #${importId}] ⚠️ [Passo 5/6] Analisando produtos sem mapeamento de-para...`, '3lm_import');
-        for (const [codExt, nomeProd] of Object.entries(produtosFaltantes)) {
-            const [alertCheck] = await conn.execute(
-                "SELECT id FROM system_unit_alerts WHERE system_unit_id = ? AND code = ? AND status = 'pendente'",
-                [systemUnitId, `3lm_${codExt}`]
-            );
+        if (usuarioId) {
+            const dtMsg = DateTime.now().setZone('America/Sao_Paulo').toFormat('yyyy-MM-dd HH:mm:ss');
+            for (const [codExt, nomeProd] of Object.entries(produtosFaltantes)) {
+                const titleAlert = `Produto 3LM Sem De-para: ${nomeProd}`;
+                const [alertCheck] = await conn.execute(
+                    "SELECT id FROM system_notification WHERE system_user_to_id = ? AND subject = ? AND checked = 'N'",
+                    [usuarioId, titleAlert]
+                );
 
-            if (alertCheck.length === 0) {
-                await conn.execute(`
-                    INSERT INTO system_unit_alerts (system_unit_id, code, title, message, status, category)
-                    VALUES (?, ?, ?, ?, 'pendente', 'integracao_pdv')
-                `, [
-                    systemUnitId,
-                    `3lm_${codExt}`,
-                    `Produto 3LM Sem De-para: ${nomeProd}`,
-                    `O produto "${nomeProd}" (Código 3LM: ${codExt}) foi importado mas não possui mapeamento com código interno.`
-                ]);
+                if (alertCheck.length === 0) {
+                    const [[maxIdRow]] = await conn.execute("SELECT COALESCE(MAX(id), 0) + 1 AS nextId FROM system_notification");
+                    const nextNotifId = maxIdRow.nextId;
+
+                    await conn.execute(`
+                        INSERT INTO system_notification (
+                            id, system_user_id, system_user_to_id, subject, message, dt_message, action_url, action_label, icon, checked
+                        ) VALUES (?, 1, ?, ?, ?, ?, 'index.php?class=SystemUnitAlertList', 'Ver Alertas', 'fas:exclamation-triangle text-warning', 'N')
+                    `, [
+                        nextNotifId,
+                        usuarioId,
+                        titleAlert,
+                        `O produto "${nomeProd}" (Código 3LM: ${codExt}) foi importado mas não possui mapeamento com código interno.`,
+                        dtMsg
+                    ]);
+                }
             }
         }
 
@@ -452,18 +461,20 @@ async function run(importId) {
 
         // 11. Envia notificação no Adianti
         if (usuarioId) {
+            const dtMsg = DateTime.now().setZone('America/Sao_Paulo').toFormat('yyyy-MM-dd HH:mm:ss');
             const [[maxIdRow]] = await conn.execute("SELECT COALESCE(MAX(id), 0) + 1 AS nextId FROM system_notification");
             const nextId = maxIdRow.nextId;
 
             await conn.execute(`
                 INSERT INTO system_notification (
                     id, system_user_id, system_user_to_id, subject, message, dt_message, action_url, action_label, icon, checked
-                ) VALUES (?, 1, ?, ?, ?, NOW(), 'index.php?class=Importador3lmList&method=onReload', 'Visualizar no Portal', 'far:check-circle text-success', 'N')
+                ) VALUES (?, 1, ?, ?, ?, ?, 'index.php?class=Importador3lmList&method=onReload', 'Visualizar no Portal', 'far:check-circle text-success', 'N')
             `, [
                 nextId,
                 usuarioId,
                 'Importação 3LM Concluída!',
-                `A planilha de faturamento '${nomeArquivo}' foi processada com sucesso. Total de ${totalNotasImportadas} notas importadas.`
+                `A planilha de faturamento '${nomeArquivo}' foi processada com sucesso. Total de ${totalNotasImportadas} notas importadas.`,
+                dtMsg
             ]);
         }
 
