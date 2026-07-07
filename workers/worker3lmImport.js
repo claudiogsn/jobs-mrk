@@ -23,6 +23,32 @@ function cleanCsvField(val) {
     return val.trim().replace(/^['"]|['"]$/g, '');
 }
 
+// Formata data brasileira (DD/MM/YYYY) para ISO (YYYY-MM-DD)
+function formatToISODate(dateStr) {
+    if (!dateStr) return null;
+    dateStr = dateStr.trim();
+    // Se já estiver no formato YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        return dateStr;
+    }
+    // Se estiver no formato DD/MM/YYYY
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+        const [day, month, year] = dateStr.split('/');
+        return `${year}-${month}-${day}`;
+    }
+    // Se contiver hora, ex: DD/MM/YYYY HH:mm:ss ou YYYY-MM-DD HH:mm:ss
+    const parts = dateStr.split(' ');
+    const onlyDate = parts[0];
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(onlyDate)) {
+        const [day, month, year] = onlyDate.split('/');
+        return `${year}-${month}-${day}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(onlyDate)) {
+        return onlyDate;
+    }
+    return dateStr;
+}
+
 async function run(importId) {
     if (!importId) {
         log('❌ Erro no worker: importId ausente.', '3lm_import');
@@ -109,7 +135,7 @@ async function run(importId) {
 
             const padRow = row.concat(Array(46).fill('')).slice(0, 46);
 
-            const dataCaixa = padRow[0];
+            const dataCaixa = formatToISODate(padRow[0]);
             const notaFiscal = padRow[3];
 
             if (!dataCaixa || !notaFiscal) {
@@ -124,7 +150,7 @@ async function run(importId) {
             const descontoItem = parseBRL(padRow[18]);
             const valorItemLiquido = parseBRL(padRow[19]);
 
-            const dataHoraEmissao = padRow[2];
+            const dataHoraEmissao = formatToISODate(padRow[2]);
             const horaAbert = padRow[22];
 
             const codPagto = padRow[34];
