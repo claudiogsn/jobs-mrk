@@ -171,6 +171,10 @@ router.get('/analise-menew', (req, res) => {
     res.sendFile(path.join(__dirname, 'views/analise_menew.html'));
 });
 
+router.get('/doc-menew', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views/doc_endpoints_menew.html'));
+});
+
 router.post('/api/analise-menew/cruzamento', async (req, res) => {
     try {
         const { system_unit_id, data } = req.body;
