@@ -16,6 +16,7 @@ const log = getLogger();
 
 (async () => {
     log.info('🟢 Iniciando processo do consumer (WhatsApp & Telemetria)...', { worker: 'consumer' });
+    
     await Promise.all([
         processQueueWhatsapp(),
         ExecuteJobTelemetria()
