@@ -16,6 +16,8 @@ const common = {
     log_date_format: 'YYYY-MM-DD HH:mm:ss',
     autorestart: true,
     max_restarts: 10,
+    watch: ["server.js", "processes", "workers", "views", "utils"],
+    ignore_watch: ["node_modules", "logs", ".git"],
     env: {
         NODE_ENV: process.env.NODE_ENV || 'production',
     },

@@ -9,6 +9,7 @@
   "scripts": {
     "start": "node -r dotenv/config -r @mrksolucoes/observability/register index.js",
     "start:legacy": "node index.js",
+    "dev": "nodemon --watch server.js --watch index.js --watch views --watch utils -e js,html -r dotenv/config -r @mrksolucoes/observability/register index.js",
     "worker:financeiro": "node workers/workerFinanceiro.js",
     "worker:consolidate": "node workers/workerConsolidateSales.js",
     "worker:docsaida": "node workers/workerCreateDocSaida.js",
