@@ -18,6 +18,7 @@ const { dispatchFinanceiro } = require('./workers/workerFinanceiro');
 const { processJobCaixaZig } = require('./workers/workerBillingZig');
 const { ProcessJobStockZig, ExecuteJobStockZig} = require('./workers/workerStockZig');
 const { processConsolidationStock } = require('./workers/WorkerConsolidationStock');
+const { ExecuteJob3lmEstoque } = require('./workers/worker3lmEstoque');
 
 const { publishFanout, EXCHANGES } = require('./utils/rabbitmq');
 
@@ -153,6 +154,261 @@ router.post('/api/extratos/sincronizar', async (req, res) => {
     }
 });
 
+router.get('/api/analise-menew/unidades', async (req, res) => {
+    try {
+        const conn = await getConnection();
+        const [units] = await conn.execute(
+            "SELECT id, name, custom_code FROM system_unit WHERE status = 1 AND custom_code IS NOT NULL AND custom_code != '' ORDER BY name"
+        );
+        conn.end();
+        res.json(units);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/analise-menew', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views/analise_menew.html'));
+});
+
+router.post('/api/analise-menew/cruzamento', async (req, res) => {
+    try {
+        const { system_unit_id, data } = req.body;
+
+        if (!system_unit_id || !data) {
+            return res.status(400).json({ success: false, message: 'Parâmetros system_unit_id e data são obrigatórios.' });
+        }
+
+        const conn = await getConnection();
+
+        // 1. Busca custom_code da loja
+        const [units] = await conn.execute("SELECT name, custom_code FROM system_unit WHERE id = ? LIMIT 1", [system_unit_id]);
+        if (units.length === 0) {
+            conn.end();
+            return res.status(404).json({ success: false, message: 'Unidade não encontrada.' });
+        }
+
+        const customCode = units[0].custom_code;
+        const nomeLoja = units[0].name;
+
+        if (!customCode) {
+            conn.end();
+            return res.status(400).json({ success: false, message: 'Unidade sem código de integração da Menew configurado.' });
+        }
+
+        // 2. Login na Menew
+        const { loginMenew, callMenew } = require('./utils/utils');
+        const authToken = await loginMenew();
+        if (!authToken) {
+            conn.end();
+            return res.status(500).json({ success: false, message: 'Falha na autenticação com a API Menew.' });
+        }
+
+        const dataRef = data; // Formato YYYY-MM-DD
+        const dataRefFechamento = DateTime.fromISO(dataRef).toFormat('dd/MM/yyyy');
+
+        // 3. Chamadas em paralelo para API da Menew
+        const [apiMov, apiPag, apiItem, apiFech] = await Promise.all([
+            callMenew({ token: authToken, requests: { jsonrpc: '2.0', method: 'movimentocaixa', params: { lojas: customCode, dtinicio: dataRef, dtfim: dataRef }, id: '1' } }, authToken),
+            callMenew({ token: authToken, requests: { jsonrpc: '2.0', method: 'pagamentos', params: { lojas: customCode, dtinicio: dataRef, dtfim: dataRef }, id: '1' } }, authToken),
+            callMenew({ token: authToken, requests: { jsonrpc: '2.0', method: 'itemvenda', params: { lojas: customCode, dtinicio: dataRef, dtfim: dataRef }, id: '1' } }, authToken),
+            callMenew({ token: authToken, requests: { jsonrpc: '2.0', method: 'fechamentocaixa', params: { lojas: customCode, dtinicio: dataRef, dtfim: dataRef }, id: '1' } }, authToken)
+        ]);
+
+        // 4. Chamadas em paralelo para o banco de dados local
+        const [dbMovRows] = await conn.execute("SELECT id, num_controle, vlTotalReceber, vlTotalRecebido, vlDesconto FROM movimento_caixa WHERE lojaId = ? AND dataContabil = ?", [customCode, dataRef]);
+        const [dbPagRows] = await conn.execute("SELECT id_operacao, descricao, valor FROM api_pagamentos WHERE id_loja = ? AND data_contabil = ?", [customCode, dataRef]);
+        const [dbSalesRows] = await conn.execute("SELECT idItemVenda, valorBruto, valorLiquido, codMaterial, descricao, __nfNumeroC, dtLancamento FROM sales WHERE system_unit_id = ? AND dtLancamento LIKE ?", [system_unit_id, dataRef + '%']);
+        const [dbFechRows] = await conn.execute("SELECT uuid, dinheiro_computado, cartao_computado FROM api_fechamento_caixa WHERE id_estabelecimento = ? AND movimento = ?", [customCode, dataRefFechamento]);
+
+        let dbFechOutrosRows = [];
+        let dbFechCartoesRows = [];
+        if (dbFechRows.length > 0) {
+            const [outros] = await conn.execute("SELECT descricao, valor FROM api_fechamento_outros WHERE fechamento_uuid = ?", [dbFechRows[0].uuid]);
+            const [cartoes] = await conn.execute("SELECT descricao, vl_sistema FROM api_fechamento_cartoes WHERE fechamento_uuid = ?", [dbFechRows[0].uuid]);
+            dbFechOutrosRows = outros;
+            dbFechCartoesRows = cartoes;
+        }
+
+        conn.end();
+
+        // 5. Consolidação de Totais e Contagens
+        const totalApiMov = { receber: 0, recebido: 0, count: apiMov?.result?.length || 0 };
+        if (apiMov?.result) {
+            apiMov.result.forEach(m => {
+                totalApiMov.receber += parseFloat(m.vlTotalReceber || 0);
+                totalApiMov.recebido += parseFloat(m.vlTotalRecebido || 0);
+            });
+        }
+
+        const totalApiPag = { valor: 0, count: apiPag?.result?.length || 0, formas: {} };
+        if (apiPag?.result) {
+            apiPag.result.forEach(p => {
+                const val = parseFloat(p.valor || 0);
+                totalApiPag.valor += val;
+                totalApiPag.formas[p.descricao] = (totalApiPag.formas[p.descricao] || 0) + val;
+            });
+        }
+
+        const totalApiItem = { bruto: 0, liquido: 0, count: apiItem?.result?.length || 0 };
+        if (apiItem?.result) {
+            apiItem.result.forEach(i => {
+                totalApiItem.bruto += parseFloat(i.valorBruto || 0);
+                totalApiItem.liquido += parseFloat(i.valorLiquido || 0);
+            });
+        }
+
+        const totalDbMov = { receber: 0, recebido: 0, count: dbMovRows.length };
+        dbMovRows.forEach(m => {
+            totalDbMov.receber += parseFloat(m.vlTotalReceber || 0);
+            totalDbMov.recebido += parseFloat(m.vlTotalRecebido || 0);
+        });
+
+        const totalDbPag = { valor: 0, count: dbPagRows.length, formas: {} };
+        dbPagRows.forEach(p => {
+            const val = parseFloat(p.valor || 0);
+            totalDbPag.valor += val;
+            totalDbPag.formas[p.descricao] = (totalDbPag.formas[p.descricao] || 0) + val;
+        });
+
+        const totalDbItem = { bruto: 0, liquido: 0, count: dbSalesRows.length };
+        dbSalesRows.forEach(i => {
+            totalDbItem.bruto += parseFloat(i.valorBruto || 0);
+            totalDbItem.liquido += parseFloat(i.valorLiquido || 0);
+        });
+
+        // 6. Fechamentos consolidados
+        const fechamentoFormatado = [];
+        if (apiFech?.result) {
+            apiFech.result.forEach(f => {
+                const formasFechamento = {};
+                if (f.cartao_detalhado) {
+                    f.cartao_detalhado.forEach(c => {
+                        formasFechamento[c.descricao] = parseFloat(c.vl_sistema || 0);
+                    });
+                }
+                if (f.outros_pagamentos) {
+                    f.outros_pagamentos.forEach(o => {
+                        // Limpa "OUTROS - " do nome se houver
+                        const desc = o.descricao.replace('OUTROS - ', '');
+                        formasFechamento[desc] = parseFloat(o.valor || 0);
+                    });
+                }
+                if (parseFloat(f.dinheiro_computado) > 0) {
+                    formasFechamento['DINHEIRO'] = parseFloat(f.dinheiro_computado || 0);
+                }
+
+                fechamentoFormatado.push({
+                    operador: f.operador,
+                    abertura: f.data_hora_abertura,
+                    fechamento: f.data_hora_fechamento,
+                    dinheiro: parseFloat(f.dinheiro_computado || 0),
+                    cartao: parseFloat(f.cartao_computado || 0),
+                    formas: formasFechamento
+                });
+            });
+        }
+
+        // 7. Diagnósticos e Auditorias de Omissão
+        const omissoes = [];
+        fechamentoFormatado.forEach(f => {
+            for (const [forma, valorFech] of Object.entries(f.formas)) {
+                // Compara com as vendas brutas de pagamentos na API
+                const valorApi = totalApiPag.formas[forma] || 0;
+                // Margem de tolerância de R$ 1,00 para arredondamentos
+                if (valorFech > valorApi + 1.0) {
+                    omissoes.push({
+                        forma: forma,
+                        valorFechamento: valorFech,
+                        valorApiPagamentos: valorApi,
+                        diferenca: valorFech - valorApi,
+                        mensagem: `A forma '${forma}' tem R$ ${valorFech.toFixed(2)} no fechamento, mas apenas R$ ${valorApi.toFixed(2)} veio detalhado nos pagamentos da API.`
+                    });
+                }
+            }
+        });
+
+        // 8. Diagnósticos de Duplicidades e Reutilização de num_controle
+        const alertasDuplicidade = [];
+        
+        // Verifica num_controle duplicados na API
+        const numControleMap = {};
+        if (apiMov?.result) {
+            apiMov.result.forEach(m => {
+                const nc = m.numControle || m.idMovimentoCaixa;
+                if (!numControleMap[nc]) {
+                    numControleMap[nc] = [];
+                }
+                numControleMap[nc].push(m);
+            });
+
+            for (const [nc, list] of Object.entries(numControleMap)) {
+                if (list.length > 1) {
+                    alertasDuplicidade.push({
+                        tipo: 'num_controle_reutilizado',
+                        chave: nc,
+                        detalhes: list.map(item => `Movimento ID ${item.idMovimentoCaixa} (Abertura: ${item.dataAbertura}, Recebido: R$ ${item.vlTotalRecebido})`),
+                        mensagem: `O número de controle/operação '${nc}' se repete ${list.length} vezes nos caixas deste dia na API da Menew.`
+                    });
+                }
+            }
+        }
+
+        // Verifica itens duplicados em sales (contingência)
+        const notasItensMap = {};
+        dbSalesRows.forEach(item => {
+            const nota = item.__nfNumeroC || 'SemNota';
+            const chave = `${nota}-${item.codMaterial}-${item.valorLiquido}`;
+            if (!notasItensMap[chave]) {
+                notasItensMap[chave] = [];
+            }
+            notasItensMap[chave].push(item);
+        });
+
+        for (const [chave, list] of Object.entries(notasItensMap)) {
+            if (list.length > 1) {
+                const [nota, cod, val] = chave.split('-');
+                alertasDuplicidade.push({
+                    tipo: 'itens_duplicados_contingencia',
+                    chave: chave,
+                    detalhes: list.map(item => `Item: ${item.descricao} (ID Venda: ${item.idItemVenda}, Lançamento: ${item.dtLancamento})`),
+                    mensagem: `Nota Fiscal ${nota}: O produto código ${cod} no valor de R$ ${parseFloat(val).toFixed(2)} está duplicado ${list.length} vezes no banco local.`
+                });
+            }
+        }
+
+        res.json({
+            success: true,
+            meta: {
+                system_unit_id,
+                customCode,
+                nomeLoja,
+                dataRef
+            },
+            totais: {
+                api: {
+                    movimento: totalApiMov,
+                    pagamentos: totalApiPag,
+                    itens: totalApiItem,
+                },
+                local: {
+                    movimento: totalDbMov,
+                    pagamentos: totalDbPag,
+                    itens: totalDbItem
+                }
+            },
+            fechamento: fechamentoFormatado,
+            auditoria: {
+                omissoes,
+                alertasDuplicidade
+            }
+        });
+
+    } catch (error) {
+        logger.error(error, { rota: '/api/analise-menew/cruzamento' });
+        res.status(500).json({ success: false, message: 'Erro ao processar análise: ' + error.message });
+    }
+});
 
 router.post('/api/extratos/processar-pendentes', async (req, res) => {
     try {
@@ -596,6 +852,16 @@ router.post('/run/fluxo-estoque', async (req, res) => {
         res.send(`Executado com sucesso`);
     } catch (err) {
         res.status(500).send("Erro ao executar fluxo de estoque");
+    }
+});
+
+router.post('/run/3lm-estoque', async (req, res) => {
+    const { dt_inicio, dt_fim } = req.body;
+    try {
+        await ExecuteJob3lmEstoque(dt_inicio, dt_fim);
+        res.send("ExecuteJob3lmEstoque executado com sucesso");
+    } catch (err) {
+        res.status(500).send("Erro ao executar ExecuteJob3lmEstoque: " + err.message);
     }
 });
 

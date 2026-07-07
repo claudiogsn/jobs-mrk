@@ -21,6 +21,7 @@ const jobMap = {
     ExecuteJobSolicitacao: require( '../workers/workerSolicitacaoExtrato').ExecuteJobSolicitacao,
     ExecuteJobImportacao: require('../workers/workerImportacaoExtrato').ExecuteJobImportacao,
     ExecuteJobIfoodSync: require('../workers/workerIfoodSync').ExecuteJobIfoodSync,
+    ExecuteJob3lmEstoque: require('../workers/worker3lmEstoque').ExecuteJob3lmEstoque,
 
     // 🔧 Job de teste
     jobTesteLog: async () => {

@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auditoria & Análise Menew | MRK</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Axios -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fafafa;
+        }
+        .shadcn-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px 0 rgba(0,0,0,0.05);
+            border-radius: 12px;
+        }
+        .shadcn-input {
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            border-radius: 6px;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .shadcn-input:focus {
+            border-color: #0f172a;
+            box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.08);
+        }
+        .tab-btn {
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            border-color: #0f172a;
+            color: #0f172a;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body class="text-slate-900 antialiased min-h-screen flex flex-col" x-data="analiseApp()">
+
+    <!-- Header -->
+    <header class="border-b border-slate-200 bg-white py-4 px-6 sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-slate-900 text-white p-2 rounded-lg">
+                    <i class="fa-solid fa-calculator-combined text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight">Auditoria & Análise Menew</h1>
+                    <p class="text-xs text-slate-500 font-mono">Dicionário de cruzamento de dados API vs Local</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="/jobs/explorer" class="text-xs font-medium text-slate-600 hover:text-slate-900 px-3 py-1.5 rounded-md hover:bg-slate-100 transition">
+                    <i class="fa-solid fa-network-wired mr-1.5"></i>API Explorer
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8 space-y-6">
+        
+        <!-- Filtros -->
+        <section class="shadcn-card p-6">
+            <form @submit.prevent="runAnalysis" class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Selecione o Estabelecimento</label>
+                    <select x-model="selectedUnitId" class="w-full p-2.5 shadcn-input text-sm">
+                        <option value="">Selecione uma loja...</option>
+                        <template x-for="unit in units" :key="unit.id">
+                            <option :value="unit.id" x-text="unit.name + ' (' + unit.custom_code + ')'"></option>
+                        </template>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Data de Referência</label>
+                    <input type="date" x-model="selectedDate" class="w-full p-2.5 shadcn-input text-sm font-mono">
+                </div>
+                <div>
+                    <button type="submit" :disabled="loading || !selectedUnitId || !selectedDate" 
+                            class="w-full py-2.5 px-4 bg-slate-950 text-white text-sm font-medium rounded-md hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2">
+                        <template x-if="loading">
+                            <i class="fa-solid fa-spinner animate-spin"></i>
+                        </template>
+                        <span x-text="loading ? 'Analisando e Cruzando...' : 'Analisar e Cruzar Dados'"></span>
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Loader -->
+        <template x-if="loading">
+            <div class="flex flex-col items-center justify-center py-20 space-y-4">
+                <div class="relative w-12 h-12">
+                    <div class="absolute inset-0 rounded-full border-4 border-slate-200"></div>
+                    <div class="absolute inset-0 rounded-full border-4 border-slate-900 border-t-transparent animate-spin"></div>
+                </div>
+                <p class="text-sm font-medium text-slate-500 font-mono">Fazendo chamadas na Menew e buscando dados locais...</p>
+            </div>
+        </template>
+
+        <!-- Resultados -->
+        <template x-if="!loading && result">
+            <div class="space-y-6">
+                
+                <!-- Informações Loja / Data -->
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-100 p-4 rounded-lg border border-slate-200">
+                    <div>
+                        <h2 class="text-base font-semibold" x-text="result.meta.nomeLoja"></h2>
+                        <p class="text-xs text-slate-500 font-mono">
+                            Código Menew: <span class="font-semibold text-slate-900" x-text="result.meta.customCode"></span> | 
+                            ID Unidade: <span class="font-semibold text-slate-900" x-text="result.meta.system_unit_id"></span>
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Data Analisada:</span>
+                        <span class="bg-slate-900 text-white text-xs px-2.5 py-1 rounded font-mono font-semibold" x-text="formatDate(result.meta.dataRef)"></span>
+                    </div>
+                </div>
+
+                <!-- Resumo dos Alertas de Auditoria -->
+                <template x-if="result.auditoria.omissoes.length > 0 || result.auditoria.alertasDuplicidade.length > 0">
+                    <div class="border border-amber-200 bg-amber-50/70 p-5 rounded-xl space-y-3">
+                        <h3 class="text-sm font-bold text-amber-800 flex items-center gap-2">
+                            <i class="fa-solid fa-triangle-exclamation"></i> Diagnósticos e Inconsistências Detectadas
+                        </h3>
+                        <div class="space-y-2 text-xs">
+                            <!-- Omissões (ex: Goomer) -->
+                            <template x-for="om in result.auditoria.omissoes">
+                                <div class="bg-white border border-amber-200 p-3 rounded-lg flex items-start gap-2.5">
+                                    <i class="fa-solid fa-circle-exclamation text-amber-600 mt-0.5"></i>
+                                    <div>
+                                        <span class="font-bold text-slate-800" x-text="'Omissão da forma ' + om.forma"></span>
+                                        <p class="text-slate-600 mt-1" x-text="om.mensagem"></p>
+                                        <span class="inline-block mt-1 font-mono font-bold text-amber-700 bg-amber-100/50 px-2 py-0.5 rounded" 
+                                              x-text="'Discrepância: R$ ' + formatCurrency(om.diferenca)"></span>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- Duplicidades -->
+                            <template x-for="dup in result.auditoria.alertasDuplicidade">
+                                <div class="bg-white border border-rose-200 p-3 rounded-lg flex items-start gap-2.5">
+                                    <i class="fa-solid fa-copy text-rose-600 mt-0.5"></i>
+                                    <div>
+                                        <span class="font-bold text-slate-800" 
+                                              x-text="dup.tipo === 'num_controle_reutilizado' ? 'Número de Controle Reutilizado (Menew)' : 'Itens Duplicados (Retransmissão/Contingência)'"></span>
+                                        <p class="text-slate-600 mt-1" x-text="dup.mensagem"></p>
+                                        <details class="mt-2 text-[10px] text-slate-500 font-mono">
+                                            <summary class="cursor-pointer hover:text-slate-800 font-bold">Ver registros afetados</summary>
+                                            <ul class="list-disc pl-4 mt-1 space-y-1">
+                                                <template x-for="det in dup.detalhes">
+                                                    <li x-text="det"></li>
+                                                </template>
+                                            </ul>
+                                        </details>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="result.auditoria.omissoes.length === 0 && result.auditoria.alertasDuplicidade.length === 0">
+                    <div class="border border-green-200 bg-green-50/70 p-4 rounded-xl flex items-center gap-3 text-green-800">
+                        <i class="fa-solid fa-circle-check text-lg"></i>
+                        <div>
+                            <p class="text-sm font-bold">Tudo Certo!</p>
+                            <p class="text-xs">Nenhuma omissão ou duplicidade detectada para esta data e loja.</p>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Cards Grid Totais Comparativos -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Faturamento / Itens -->
+                    <div class="shadcn-card p-6 space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <h3 class="text-sm font-bold tracking-tight text-slate-500 uppercase">Itens de Venda (Faturamento)</h3>
+                            <i class="fa-solid fa-box text-slate-400"></i>
+                        </div>
+                        <div class="space-y-3 font-mono text-xs">
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">API Menew Bruto:</span>
+                                <span class="font-semibold" x-text="formatCurrency(result.totais.api.itens.bruto)"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">API Menew Líquido:</span>
+                                <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.api.itens.liquido)"></span>
+                            </div>
+                            <div class="flex justify-between border-b border-slate-100 pb-2">
+                                <span class="text-slate-500">Qtd Itens API:</span>
+                                <span class="font-semibold" x-text="result.totais.api.itens.count"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Local Bruto (sales):</span>
+                                <span class="font-semibold" x-text="formatCurrency(result.totais.local.itens.bruto)"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Local Líquido (sales):</span>
+                                <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.local.itens.liquido)"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Qtd Itens Local:</span>
+                                <span class="font-semibold" x-text="result.totais.local.itens.count"></span>
+                            </div>
+                        </div>
+                        <div class="pt-2">
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold font-mono"
+                                  :class="result.totais.api.itens.liquido === result.totais.local.itens.liquido && result.totais.api.itens.count === result.totais.local.itens.count ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'">
+                                <i class="fa-solid" :class="result.totais.api.itens.liquido === result.totais.local.itens.liquido && result.totais.api.itens.count === result.totais.local.itens.count ? 'fa-circle-check' : 'fa-circle-xmark'"></i>
+                                <span x-text="result.totais.api.itens.liquido === result.totais.local.itens.liquido && result.totais.api.itens.count === result.totais.local.itens.count ? 'Integração OK' : 'Divergente'"></span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Pagamentos -->
+                    <div class="shadcn-card p-6 space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <h3 class="text-sm font-bold tracking-tight text-slate-500 uppercase">Pagamentos Detalhados</h3>
+                            <i class="fa-solid fa-credit-card text-slate-400"></i>
+                        </div>
+                        <div class="space-y-3 font-mono text-xs">
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Soma API Pagamentos:</span>
+                                <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.api.pagamentos.valor)"></span>
+                            </div>
+                            <div class="flex justify-between border-b border-slate-100 pb-2">
+                                <span class="text-slate-500">Qtd Lançamentos API:</span>
+                                <span class="font-semibold" x-text="result.totais.api.pagamentos.count"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Soma Local Pagamentos:</span>
+                                <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.local.pagamentos.valor)"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Qtd Lançamentos Local:</span>
+                                <span class="font-semibold" x-text="result.totais.local.pagamentos.count"></span>
+                            </div>
+                        </div>
+                        <div class="pt-2">
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold font-mono"
+                                  :class="result.totais.api.pagamentos.valor === result.totais.local.pagamentos.valor && result.totais.api.pagamentos.count === result.totais.local.pagamentos.count ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'">
+                                <i class="fa-solid" :class="result.totais.api.pagamentos.valor === result.totais.local.pagamentos.valor && result.totais.api.pagamentos.count === result.totais.local.pagamentos.count ? 'fa-circle-check' : 'fa-circle-xmark'"></i>
+                                <span x-text="result.totais.api.pagamentos.valor === result.totais.local.pagamentos.valor && result.totais.api.pagamentos.count === result.totais.local.pagamentos.count ? 'Integração OK' : 'Divergente'"></span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Movimentação Caixa -->
+                    <div class="shadcn-card p-6 space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <h3 class="text-sm font-bold tracking-tight text-slate-500 uppercase">Movimentação Caixa</h3>
+                            <i class="fa-solid fa-university text-slate-400"></i>
+                        </div>
+                        <div class="space-y-3 font-mono text-xs">
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">API Caixa Receber:</span>
+                                <span class="font-semibold" x-text="formatCurrency(result.totais.api.movimento.receber)"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">API Caixa Recebido:</span>
+                                <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.api.movimento.recebido)"></span>
+                            </div>
+                            <div class="flex justify-between border-b border-slate-100 pb-2">
+                                <span class="text-slate-500">Qtd Movimentos API:</span>
+                                <span class="font-semibold" x-text="result.totais.api.movimento.count"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Local Caixa Receber:</span>
+                                <span class="font-semibold" x-text="formatCurrency(result.totais.local.movimento.receber)"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Local Caixa Recebido:</span>
+                                <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.local.movimento.recebido)"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Qtd Movimentos Local:</span>
+                                <span class="font-semibold" x-text="result.totais.local.movimento.count"></span>
+                            </div>
+                        </div>
+                        <div class="pt-2">
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold font-mono"
+                                  :class="result.totais.api.movimento.receber === result.totais.local.movimento.receber && result.totais.api.movimento.recebido === result.totais.local.movimento.recebido && result.totais.api.movimento.count === result.totais.local.movimento.count ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'">
+                                <i class="fa-solid" :class="result.totais.api.movimento.receber === result.totais.local.movimento.receber && result.totais.api.movimento.recebido === result.totais.local.movimento.recebido && result.totais.api.movimento.count === result.totais.local.movimento.count ? 'fa-circle-check' : 'fa-circle-xmark'"></i>
+                                <span x-text="result.totais.api.movimento.receber === result.totais.local.movimento.receber && result.totais.api.movimento.recebido === result.totais.local.movimento.recebido && result.totais.api.movimento.count === result.totais.local.movimento.count ? 'Integração OK' : 'Divergente'"></span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detalhes de Fechamentos Consolidados -->
+                <div class="shadcn-card p-6 space-y-4">
+                    <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <i class="fa-solid fa-file-invoice-dollar text-slate-500"></i>
+                        Fechamento de Caixa Consolidado (da API `fechamentocaixa`)
+                    </h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead>
+                                <tr class="border-b border-slate-200 bg-slate-50">
+                                    <th class="py-2.5 px-4 font-semibold text-slate-500">Operador</th>
+                                    <th class="py-2.5 px-4 font-semibold text-slate-500">Horário Abertura/Fechamento</th>
+                                    <th class="py-2.5 px-4 font-semibold text-slate-500 text-right">Dinheiro Computado</th>
+                                    <th class="py-2.5 px-4 font-semibold text-slate-500 text-right">Cartão Computado</th>
+                                    <th class="py-2.5 px-4 font-semibold text-slate-500">Outras Formas Detalhadas</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="f in result.fechamento">
+                                    <tr class="border-b border-slate-100 hover:bg-slate-50/50">
+                                        <td class="py-3 px-4 font-medium" x-text="'Operador #' + f.operador"></td>
+                                        <td class="py-3 px-4 font-mono text-[11px]" x-text="f.abertura + ' até ' + f.fechamento"></td>
+                                        <td class="py-3 px-4 text-right font-mono" x-text="formatCurrency(f.dinheiro)"></td>
+                                        <td class="py-3 px-4 text-right font-mono font-medium text-slate-900" x-text="formatCurrency(f.cartao)"></td>
+                                        <td class="py-3 px-4">
+                                            <div class="flex flex-wrap gap-1.5">
+                                                <template x-for="[forma, valor] in Object.entries(f.formas)" :key="forma">
+                                                    <span class="bg-slate-100 border border-slate-200 text-slate-700 text-[10px] px-2 py-0.5 rounded font-mono font-medium">
+                                                        <span x-text="forma + ': '"></span>
+                                                        <span class="font-bold text-slate-900" x-text="formatCurrency(valor)"></span>
+                                                    </span>
+                                                </template>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </template>
+        
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-200 bg-white py-4 px-6 text-center text-xs text-slate-400 font-mono mt-auto">
+        MRK Soluções de TI © 2026 | Visual Estético Shadcn/ui & Tailwind CSS
+    </footer>
+
+    <script>
+        function analiseApp() {
+            return {
+                units: [],
+                selectedUnitId: '',
+                selectedDate: '',
+                loading: false,
+                result: null,
+
+                async init() {
+                    try {
+                        const res = await axios.get('/jobs/api/analise-menew/unidades');
+                        this.units = res.data;
+                    } catch (e) {
+                        console.error('Erro ao buscar unidades:', e);
+                        alert('Falha ao carregar a lista de estabelecimentos.');
+                    }
+                },
+
+                async runAnalysis() {
+                    this.loading = true;
+                    this.result = null;
+
+                    try {
+                        const res = await axios.post('/jobs/api/analise-menew/cruzamento', {
+                            system_unit_id: parseInt(this.selectedUnitId),
+                            data: this.selectedDate
+                        });
+                        this.result = res.data;
+                    } catch (e) {
+                        console.error('Erro na análise:', e);
+                        alert(e.response?.data?.message || 'Ocorreu um erro ao rodar a análise.');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                formatCurrency(value) {
+                    return 'R$ ' + (value || 0).toFixed(2)
+                        .replace('.', ',')
+                        .replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+                },
+
+                formatDate(dateStr) {
+                    if (!dateStr) return '';
+                    const parts = dateStr.split('-');
+                    if (parts.length === 3) {
+                        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                    }
+                    return dateStr;
+                }
+            }
+        }
+    </script>
+</body>
+</html>
