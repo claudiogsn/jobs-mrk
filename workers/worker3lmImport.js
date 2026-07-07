@@ -74,7 +74,7 @@ async function run(importId) {
         const usuarioId = rows[0].usuario_id;
         const nomeArquivo = rows[0].nome_arquivo;
 
-        log(`[3LM Import #${importId}] Iniciando processamento do arquivo ${nomeArquivo} (Unidade: ${systemUnitId})`, '3lm_import');
+        log(`[3LM Import #${importId}] 🚀 [Passo 1/6] Localizando e abrindo arquivo ${nomeArquivo} (Unidade: ${systemUnitId})...`, '3lm_import');
 
         // 2. Reserva a tarefa para evitar duplicidade de execução
         await conn.execute("UPDATE 3lm_imports SET status = 'processando' WHERE id = ?", [importId]);
@@ -87,6 +87,8 @@ async function run(importId) {
         // 3. Lê o CSV
         const csvContent = fs.readFileSync(filePath, 'utf8');
         const lines = csvContent.replace(/\r/g, '').split('\n');
+
+        log(`[3LM Import #${importId}] 📂 [Passo 2/6] Analisando e estruturando dados do CSV (Total de ${lines.length} linhas)...`, '3lm_import');
 
         if (lines.length < 2) {
             throw new Error("Arquivo CSV está vazio ou não possui registros.");
@@ -206,10 +208,7 @@ async function run(importId) {
         }
 
         const listOrders = Object.values(orders);
-        log(`[3LM Import #${importId}] CSV Processado. Total de Notas/Vendas encontradas: ${listOrders.length}`, '3lm_import');
-
-        // 7. Inicia transação no MySQL
-        await conn.beginTransaction();
+        log(`[3LM Import #${importId}] 🧠 [Passo 3/6] Estruturação concluída: ${listOrders.length} notas fiscais identificadas.`, '3lm_import');
 
         const datasParaProcessarEstoque = new Set();
         let totalVendasCalculado = 0.0;
@@ -218,19 +217,59 @@ async function run(importId) {
         let dataFimFaturamento = null;
 
         for (const order of listOrders) {
-            const notaFiscal = order.num_nota;
             const dataContabil = order.data_caixa;
-            const idOperacao = `3lm-${systemUnitId}-${notaFiscal}`;
-
             datasParaProcessarEstoque.add(dataContabil);
             totalVendasCalculado += order.val_total_nota;
 
             if (!dataInicioFaturamento || dataContabil < dataInicioFaturamento) dataInicioFaturamento = dataContabil;
             if (!dataFimFaturamento || dataContabil > dataFimFaturamento) dataFimFaturamento = dataContabil;
+        }
 
-            // 7.1. Limpa registros prévios do dia/nota
-            await conn.execute("DELETE FROM sales WHERE system_unit_id = ? AND __nfNumeroC = ? AND dtLancamento = ?", [systemUnitId, parseInt(notaFiscal), dataContabil]);
-            await conn.execute("DELETE FROM movimento_caixa WHERE lojaId = ? AND num_controle = ? AND dataContabil = ?", [customCode, idOperacao, dataContabil]);
+        const datasArray = Array.from(datasParaProcessarEstoque);
+
+        // 7. Inicia transação no MySQL
+        log(`[3LM Import #${importId}] 🔒 [Passo 4/6] Iniciando transação MySQL e limpando dados anteriores em lote...`, '3lm_import');
+        await conn.beginTransaction();
+
+        if (datasArray.length > 0) {
+            const placeholders = datasArray.map(() => '?').join(',');
+
+            log(`[3LM Import #${importId}]   -> Limpando em lote da tabela sales (${datasArray.length} datas)...`, '3lm_import');
+            await conn.execute(`
+                DELETE FROM sales 
+                WHERE system_unit_id = ? 
+                  AND dtLancamento IN (${placeholders}) 
+                  AND idItemVenda LIKE '3lm-%'
+            `, [systemUnitId, ...datasArray]);
+
+            log(`[3LM Import #${importId}]   -> Limpando em lote da tabela movimento_caixa...`, '3lm_import');
+            await conn.execute(`
+                DELETE FROM movimento_caixa 
+                WHERE lojaId = ? 
+                  AND dataContabil IN (${placeholders}) 
+                  AND num_controle LIKE '3lm-%'
+            `, [parseInt(customCode), ...datasArray]);
+
+            log(`[3LM Import #${importId}]   -> Limpando em lote da tabela api_pagamentos...`, '3lm_import');
+            await conn.execute(`
+                DELETE FROM api_pagamentos 
+                WHERE id_loja = ? 
+                  AND data_contabil IN (${placeholders}) 
+                  AND id_operacao LIKE '3lm-%'
+            `, [parseInt(customCode), ...datasArray]);
+        }
+
+        let orderCount = 0;
+        for (const order of listOrders) {
+            orderCount++;
+            const notaFiscal = order.num_nota;
+            const dataContabil = order.data_caixa;
+            const idOperacao = `3lm-${systemUnitId}-${notaFiscal}`;
+
+            // Log de progresso estruturado
+            if (orderCount === 1 || orderCount === listOrders.length || orderCount % 50 === 0) {
+                log(`[3LM Import #${importId}]   -> Gravando no banco: Nota ${orderCount} de ${listOrders.length} (NF: ${notaFiscal}, Data: ${dataContabil})...`, '3lm_import');
+            }
 
             // 7.2. Grava pagamentos
             const paymentsList = Object.values(order.payments);
@@ -238,9 +277,6 @@ async function run(importId) {
             for (const pay of paymentsList) {
                 payIndex++;
                 const payUuid = randomUUID();
-
-                // Exclui pagamentos anteriores
-                await conn.execute("DELETE FROM api_pagamentos WHERE id_loja = ? AND id_operacao = ?", [parseInt(customCode), idOperacao]);
 
                 await conn.execute(`
                     INSERT INTO api_pagamentos (
@@ -347,6 +383,7 @@ async function run(importId) {
         }
 
         // 7.5. Registra produtos faltantes em alertas
+        log(`[3LM Import #${importId}] ⚠️ [Passo 5/6] Analisando produtos sem mapeamento de-para...`, '3lm_import');
         for (const [codExt, nomeProd] of Object.entries(produtosFaltantes)) {
             const [alertCheck] = await conn.execute(
                 "SELECT id FROM system_unit_alerts WHERE system_unit_id = ? AND code = ? AND status = 'pendente'",
@@ -367,14 +404,15 @@ async function run(importId) {
         }
 
         await conn.commit();
-        log(`[3LM Import #${importId}] Transação MySQL commitada com sucesso.`, '3lm_import');
+        log(`[3LM Import #${importId}] 💾 Gravado com sucesso no MySQL (Vendas, Pagamentos e Caixas).`, '3lm_import');
 
         // 8. Processamento assíncrono de estoque e BI via chamadas HTTP (para reuso do PHP)
         const datasArray = Array.from(datasParaProcessarEstoque);
-        log(`[3LM Import #${importId}] Disparando saídas de estoque no PHP para ${datasArray.length} datas...`, '3lm_import');
+        log(`[3LM Import #${importId}] ⚡ [Passo 6/6] Sincronizando estoque e BI (Processando ${datasArray.length} datas no backend PHP)...`, '3lm_import');
 
         for (const dataRef of datasArray) {
             try {
+                log(`[3LM Import #${importId}]   -> Sincronizando estoque para a data ${dataRef}...`, '3lm_import');
                 await callPHP('importMovBySalesCons', { system_unit_id: systemUnitId, data: dataRef });
             } catch (errEstoque) {
                 log(`[3LM Import #${importId}] ⚠️ Falha na consolidação de estoque da data ${dataRef}: ${errEstoque.message}`, '3lm_import');
@@ -383,7 +421,7 @@ async function run(importId) {
 
         // 9. Consolida faturamento de BI
         if (dataInicioFaturamento && dataFimFaturamento) {
-            log(`[3LM Import #${importId}] Disparando consolidação de BI entre ${dataInicioFaturamento} e ${dataFimFaturamento}...`, '3lm_import');
+            log(`[3LM Import #${importId}]   -> Sincronizando BI para o período de ${dataInicioFaturamento} a ${dataFimFaturamento}...`, '3lm_import');
             try {
                 await callPHP('consolidateSalesByUnit', {
                     system_unit_id: systemUnitId,
@@ -410,6 +448,8 @@ async function run(importId) {
         if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
         }
+
+        log(`[3LM Import #${importId}] 🔔 Gerando notificação no painel do usuário...`, '3lm_import');
 
         // 11. Envia notificação no Adianti
         if (usuarioId) {
