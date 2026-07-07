@@ -407,7 +407,6 @@ async function run(importId) {
         log(`[3LM Import #${importId}] 💾 Gravado com sucesso no MySQL (Vendas, Pagamentos e Caixas).`, '3lm_import');
 
         // 8. Processamento assíncrono de estoque e BI via chamadas HTTP (para reuso do PHP)
-        const datasArray = Array.from(datasParaProcessarEstoque);
         log(`[3LM Import #${importId}] ⚡ [Passo 6/6] Sincronizando estoque e BI (Processando ${datasArray.length} datas no backend PHP)...`, '3lm_import');
 
         for (const dataRef of datasArray) {
