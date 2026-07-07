@@ -397,6 +397,7 @@ async function run(importId) {
                     const [[maxIdRow]] = await conn.execute("SELECT COALESCE(MAX(id), 0) + 1 AS nextId FROM system_notification");
                     const nextNotifId = maxIdRow.nextId;
 
+                    // 1. Grava no sininho do Adianti (system_notification)
                     await conn.execute(`
                         INSERT INTO system_notification (
                             id, system_user_id, system_user_to_id, subject, message, dt_message, action_url, action_label, icon, checked
@@ -407,6 +408,16 @@ async function run(importId) {
                         titleAlert,
                         `O produto "${nomeProd}" (Código 3LM: ${codExt}) foi importado mas não possui mapeamento com código interno.`,
                         dtMsg
+                    ]);
+
+                    // 2. Grava na tabela customizada mrk_alerts do Portal
+                    await conn.execute(`
+                        INSERT INTO mrk_alerts (system_unit_id, title, message, type, category, active)
+                        VALUES (?, ?, ?, 'warning', 'integracao_pdv', 'Y')
+                    `, [
+                        systemUnitId,
+                        titleAlert,
+                        `O produto "${nomeProd}" (Código 3LM: ${codExt}) foi importado mas não possui mapeamento com código interno.`
                     ]);
                 }
             }
