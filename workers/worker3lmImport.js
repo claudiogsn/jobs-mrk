@@ -4,7 +4,7 @@ const path = require('path');
 const { getConnection, callPHP } = require('../utils/utils');
 const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 
 const UPLOAD_3LM_DIR = process.env.UPLOAD_3LM_DIR || '/Users/claudiogomes/projects/portal-mrk/api/v1/public/uploads/3lm';
 
@@ -211,7 +211,7 @@ async function run(importId) {
             let payIndex = 0;
             for (const pay of paymentsList) {
                 payIndex++;
-                const payUuid = uuidv4();
+                const payUuid = randomUUID();
 
                 // Exclui pagamentos anteriores
                 await conn.execute("DELETE FROM api_pagamentos WHERE id_loja = ? AND id_operacao = ?", [parseInt(customCode), idOperacao]);
