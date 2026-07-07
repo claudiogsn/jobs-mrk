@@ -60,17 +60,17 @@
         .tab-btn.active {
             border-color: #0f172a;
             color: #0f172a;
-            font-weight: 500;
+            font-weight: 600;
         }
     </style>
 </head>
 <body class="text-slate-900 antialiased min-h-screen flex flex-col" x-data="analiseApp()">
 
     <!-- Header -->
-    <header class="border-b border-slate-200 bg-white py-4 px-6 sticky top-0 z-30">
+    <header class="border-b border-slate-200 bg-white py-4 px-6 sticky top-0 z-30 shadow-sm">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <div class="bg-slate-900 text-white p-2 rounded-lg">
+                <div class="bg-indigo-600 text-white p-2.5 rounded-lg shadow-sm">
                     <i class="fa-solid fa-calculator-combined text-lg"></i>
                 </div>
                 <div>
@@ -79,8 +79,8 @@
                 </div>
             </div>
             <div class="flex items-center gap-2">
-                <a href="/jobs/explorer" class="text-xs font-medium text-slate-600 hover:text-slate-900 px-3 py-1.5 rounded-md hover:bg-slate-100 transition">
-                    <i class="fa-solid fa-network-wired mr-1.5"></i>API Explorer
+                <a href="/jobs/doc-menew" class="text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-md transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-book-bookmark"></i>API Explorer
                 </a>
             </div>
         </div>
@@ -122,7 +122,7 @@
             <div class="flex flex-col items-center justify-center py-20 space-y-4">
                 <div class="relative w-12 h-12">
                     <div class="absolute inset-0 rounded-full border-4 border-slate-200"></div>
-                    <div class="absolute inset-0 rounded-full border-4 border-slate-900 border-t-transparent animate-spin"></div>
+                    <div class="absolute inset-0 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
                 </div>
                 <p class="text-sm font-medium text-slate-500 font-mono">Fazendo chamadas na Menew e buscando dados locais...</p>
             </div>
@@ -147,192 +147,326 @@
                     </div>
                 </div>
 
-                <!-- Resumo dos Alertas de Auditoria -->
-                <template x-if="result.auditoria.omissoes.length > 0 || result.auditoria.alertasDuplicidade.length > 0">
-                    <div class="border border-amber-200 bg-amber-50/70 p-5 rounded-xl space-y-3">
-                        <h3 class="text-sm font-bold text-amber-800 flex items-center gap-2">
-                            <i class="fa-solid fa-triangle-exclamation"></i> Diagnósticos e Inconsistências Detectadas
-                        </h3>
-                        <div class="space-y-2 text-xs">
-                            <!-- Omissões (ex: Goomer) -->
-                            <template x-for="om in result.auditoria.omissoes">
-                                <div class="bg-white border border-amber-200 p-3 rounded-lg flex items-start gap-2.5">
-                                    <i class="fa-solid fa-circle-exclamation text-amber-600 mt-0.5"></i>
-                                    <div>
-                                        <span class="font-bold text-slate-800" x-text="'Omissão da forma ' + om.forma"></span>
-                                        <p class="text-slate-600 mt-1" x-text="om.mensagem"></p>
-                                        <span class="inline-block mt-1 font-mono font-bold text-amber-700 bg-amber-100/50 px-2 py-0.5 rounded" 
-                                              x-text="'Discrepância: R$ ' + formatCurrency(om.diferenca)"></span>
+                <!-- Abas Estilo Shadcn/ui -->
+                <div class="border-b border-slate-200 flex gap-6 text-sm font-medium">
+                    <button class="py-2.5 tab-btn" :class="{ 'active text-slate-900': activeTab === 'geral', 'text-slate-500 hover:text-slate-900': activeTab !== 'geral' }" @click="activeTab = 'geral'">
+                        <i class="fa-solid fa-chart-line mr-1.5"></i>Geral & Alertas
+                    </button>
+                    <button class="py-2.5 tab-btn" :class="{ 'active text-slate-900': activeTab === 'api_itens', 'text-slate-500 hover:text-slate-900': activeTab !== 'api_itens' }" @click="activeTab = 'api_itens'">
+                        <i class="fa-solid fa-cloud mr-1.5"></i>Produtos API Menew
+                        <span class="bg-slate-100 text-slate-700 text-xs px-1.5 py-0.5 rounded ml-1 font-bold font-mono" x-text="result.raw.api_itens.length"></span>
+                    </button>
+                    <button class="py-2.5 tab-btn" :class="{ 'active text-slate-900': activeTab === 'local_itens', 'text-slate-500 hover:text-slate-900': activeTab !== 'local_itens' }" @click="activeTab = 'local_itens'">
+                        <i class="fa-solid fa-database mr-1.5"></i>Produtos Banco Local (sales)
+                        <span class="bg-slate-100 text-slate-700 text-xs px-1.5 py-0.5 rounded ml-1 font-bold font-mono" x-text="result.raw.local_itens.length"></span>
+                    </button>
+                    <button class="py-2.5 tab-btn" :class="{ 'active text-slate-900': activeTab === 'fechamento', 'text-slate-500 hover:text-slate-900': activeTab !== 'fechamento' }" @click="activeTab = 'fechamento'">
+                        <i class="fa-solid fa-file-invoice-dollar mr-1.5"></i>Fechamentos Consolidados
+                    </button>
+                </div>
+
+                <!-- ABA 1: Geral & Alertas -->
+                <div x-show="activeTab === 'geral'" class="space-y-6">
+                    
+                    <!-- Resumo dos Alertas de Auditoria -->
+                    <template x-if="result.auditoria.omissoes.length > 0 || result.auditoria.alertasDuplicidade.length > 0">
+                        <div class="border border-amber-200 bg-amber-50/70 p-5 rounded-xl space-y-3">
+                            <h3 class="text-sm font-bold text-amber-800 flex items-center gap-2">
+                                <i class="fa-solid fa-triangle-exclamation"></i> Diagnósticos e Inconsistências Detectadas
+                            </h3>
+                            <div class="space-y-2 text-xs">
+                                <!-- Omissões (ex: Goomer) -->
+                                <template x-for="om in result.auditoria.omissoes">
+                                    <div class="bg-white border border-amber-200 p-3 rounded-lg flex items-start gap-2.5">
+                                        <i class="fa-solid fa-circle-exclamation text-amber-600 mt-0.5"></i>
+                                        <div>
+                                            <span class="font-bold text-slate-800" x-text="'Omissão da forma ' + om.forma"></span>
+                                            <p class="text-slate-600 mt-1" x-text="om.mensagem"></p>
+                                            <span class="inline-block mt-1 font-mono font-bold text-amber-700 bg-amber-100/50 px-2 py-0.5 rounded" 
+                                                  x-text="'Discrepância: R$ ' + formatCurrency(om.diferenca)"></span>
+                                        </div>
                                     </div>
-                                </div>
-                            </template>
+                                </template>
 
-                            <!-- Duplicidades -->
-                            <template x-for="dup in result.auditoria.alertasDuplicidade">
-                                <div class="bg-white border border-rose-200 p-3 rounded-lg flex items-start gap-2.5">
-                                    <i class="fa-solid fa-copy text-rose-600 mt-0.5"></i>
-                                    <div>
-                                        <span class="font-bold text-slate-800" 
-                                              x-text="dup.tipo === 'num_controle_reutilizado' ? 'Número de Controle Reutilizado (Menew)' : 'Itens Duplicados (Retransmissão/Contingência)'"></span>
-                                        <p class="text-slate-600 mt-1" x-text="dup.mensagem"></p>
-                                        <details class="mt-2 text-[10px] text-slate-500 font-mono">
-                                            <summary class="cursor-pointer hover:text-slate-800 font-bold">Ver registros afetados</summary>
-                                            <ul class="list-disc pl-4 mt-1 space-y-1">
-                                                <template x-for="det in dup.detalhes">
-                                                    <li x-text="det"></li>
-                                                </template>
-                                            </ul>
-                                        </details>
+                                <!-- Duplicidades -->
+                                <template x-for="dup in result.auditoria.alertasDuplicidade">
+                                    <div class="bg-white border border-rose-200 p-3 rounded-lg flex items-start gap-2.5">
+                                        <i class="fa-solid fa-copy text-rose-600 mt-0.5"></i>
+                                        <div>
+                                            <span class="font-bold text-slate-800" 
+                                                  x-text="dup.tipo === 'num_controle_reutilizado' ? 'Número de Controle Reutilizado (Menew)' : 'Itens Duplicados (Retransmissão/Contingência)'"></span>
+                                            <p class="text-slate-600 mt-1" x-text="dup.mensagem"></p>
+                                            <button @click="activeTab = (dup.tipo === 'num_controle_reutilizado' ? 'api_itens' : 'local_itens'); if(dup.tipo === 'num_controle_reutilizado') { searchApiQuery = dup.chave; } else { searchLocalQuery = dup.chave.split('-')[0]; }" 
+                                                    class="mt-2 text-[10px] text-indigo-600 hover:text-indigo-900 font-bold hover:underline flex items-center gap-1">
+                                                <i class="fa-solid fa-magnifying-glass"></i> Filtrar e ver itens afetados na planilha
+                                            </button>
+                                        </div>
                                     </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+
+                    <template x-if="result.auditoria.omissoes.length === 0 && result.auditoria.alertasDuplicidade.length === 0">
+                        <div class="border border-green-200 bg-green-50/70 p-4 rounded-xl flex items-center gap-3 text-green-800">
+                            <i class="fa-solid fa-circle-check text-lg"></i>
+                            <div>
+                                <p class="text-sm font-bold">Tudo Certo!</p>
+                                <p class="text-xs">Nenhuma omissão ou duplicidade detectada para esta data e loja.</p>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Cards Grid Totais Comparativos -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- Faturamento / Itens -->
+                        <div class="shadcn-card p-6 space-y-4">
+                            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                                <h3 class="text-sm font-bold tracking-tight text-slate-500 uppercase">Itens de Venda (Faturamento)</h3>
+                                <i class="fa-solid fa-box text-slate-400"></i>
+                            </div>
+                            <div class="space-y-3 font-mono text-xs">
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">API Menew Bruto:</span>
+                                    <span class="font-semibold" x-text="formatCurrency(result.totais.api.itens.bruto)"></span>
                                 </div>
-                            </template>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">API Menew Líquido:</span>
+                                    <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.api.itens.liquido)"></span>
+                                </div>
+                                <div class="flex justify-between border-b border-slate-100 pb-2">
+                                    <span class="text-slate-500">Qtd Itens API:</span>
+                                    <span class="font-semibold text-indigo-600 font-bold cursor-pointer hover:underline" @click="activeTab = 'api_itens'" x-text="result.totais.api.itens.count"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Local Bruto (sales):</span>
+                                    <span class="font-semibold" x-text="formatCurrency(result.totais.local.itens.bruto)"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Local Líquido (sales):</span>
+                                    <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.local.itens.liquido)"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Qtd Itens Local:</span>
+                                    <span class="font-semibold text-indigo-600 font-bold cursor-pointer hover:underline" @click="activeTab = 'local_itens'" x-text="result.totais.local.itens.count"></span>
+                                </div>
+                            </div>
+                            <div class="pt-2">
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold font-mono"
+                                      :class="result.totais.api.itens.liquido === result.totais.local.itens.liquido && result.totais.api.itens.count === result.totais.local.itens.count ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'">
+                                    <i class="fa-solid" :class="result.totais.api.itens.liquido === result.totais.local.itens.liquido && result.totais.api.itens.count === result.totais.local.itens.count ? 'fa-circle-check' : 'fa-circle-xmark'"></i>
+                                    <span x-text="result.totais.api.itens.liquido === result.totais.local.itens.liquido && result.totais.api.itens.count === result.totais.local.itens.count ? 'Integração OK' : 'Divergente'"></span>
+                                </span>
+                            </div>
                         </div>
-                    </div>
-                </template>
 
-                <template x-if="result.auditoria.omissoes.length === 0 && result.auditoria.alertasDuplicidade.length === 0">
-                    <div class="border border-green-200 bg-green-50/70 p-4 rounded-xl flex items-center gap-3 text-green-800">
-                        <i class="fa-solid fa-circle-check text-lg"></i>
-                        <div>
-                            <p class="text-sm font-bold">Tudo Certo!</p>
-                            <p class="text-xs">Nenhuma omissão ou duplicidade detectada para esta data e loja.</p>
+                        <!-- Pagamentos -->
+                        <div class="shadcn-card p-6 space-y-4">
+                            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                                <h3 class="text-sm font-bold tracking-tight text-slate-500 uppercase">Pagamentos Detalhados</h3>
+                                <i class="fa-solid fa-credit-card text-slate-400"></i>
+                            </div>
+                            <div class="space-y-3 font-mono text-xs">
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Soma API Pagamentos:</span>
+                                    <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.api.pagamentos.valor)"></span>
+                                </div>
+                                <div class="flex justify-between border-b border-slate-100 pb-2">
+                                    <span class="text-slate-500">Qtd Lançamentos API:</span>
+                                    <span class="font-semibold" x-text="result.totais.api.pagamentos.count"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Soma Local Pagamentos:</span>
+                                    <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.local.pagamentos.valor)"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Qtd Lançamentos Local:</span>
+                                    <span class="font-semibold" x-text="result.totais.local.pagamentos.count"></span>
+                                </div>
+                            </div>
+                            <div class="pt-2">
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold font-mono"
+                                      :class="result.totais.api.pagamentos.valor === result.totais.local.pagamentos.valor && result.totais.api.pagamentos.count === result.totais.local.pagamentos.count ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'">
+                                    <i class="fa-solid" :class="result.totais.api.pagamentos.valor === result.totais.local.pagamentos.valor && result.totais.api.pagamentos.count === result.totais.local.pagamentos.count ? 'fa-circle-check' : 'fa-circle-xmark'"></i>
+                                    <span x-text="result.totais.api.pagamentos.valor === result.totais.local.pagamentos.valor && result.totais.api.pagamentos.count === result.totais.local.pagamentos.count ? 'Integração OK' : 'Divergente'"></span>
+                                </span>
+                            </div>
                         </div>
-                    </div>
-                </template>
 
-                <!-- Cards Grid Totais Comparativos -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <!-- Faturamento / Itens -->
-                    <div class="shadcn-card p-6 space-y-4">
-                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-                            <h3 class="text-sm font-bold tracking-tight text-slate-500 uppercase">Itens de Venda (Faturamento)</h3>
-                            <i class="fa-solid fa-box text-slate-400"></i>
-                        </div>
-                        <div class="space-y-3 font-mono text-xs">
-                            <div class="flex justify-between">
-                                <span class="text-slate-500">API Menew Bruto:</span>
-                                <span class="font-semibold" x-text="formatCurrency(result.totais.api.itens.bruto)"></span>
+                        <!-- Movimentação Caixa -->
+                        <div class="shadcn-card p-6 space-y-4">
+                            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                                <h3 class="text-sm font-bold tracking-tight text-slate-500 uppercase">Movimentação Caixa</h3>
+                                <i class="fa-solid fa-university text-slate-400"></i>
                             </div>
-                            <div class="flex justify-between">
-                                <span class="text-slate-500">API Menew Líquido:</span>
-                                <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.api.itens.liquido)"></span>
+                            <div class="space-y-3 font-mono text-xs">
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">API Caixa Receber:</span>
+                                    <span class="font-semibold" x-text="formatCurrency(result.totais.api.movimento.receber)"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">API Caixa Recebido:</span>
+                                    <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.api.movimento.recebido)"></span>
+                                </div>
+                                <div class="flex justify-between border-b border-slate-100 pb-2">
+                                    <span class="text-slate-500">Qtd Movimentos API:</span>
+                                    <span class="font-semibold" x-text="result.totais.api.movimento.count"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Local Caixa Receber:</span>
+                                    <span class="font-semibold" x-text="formatCurrency(result.totais.local.movimento.receber)"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Local Caixa Recebido:</span>
+                                    <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.local.movimento.recebido)"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Qtd Movimentos Local:</span>
+                                    <span class="font-semibold" x-text="result.totais.local.movimento.count"></span>
+                                </div>
                             </div>
-                            <div class="flex justify-between border-b border-slate-100 pb-2">
-                                <span class="text-slate-500">Qtd Itens API:</span>
-                                <span class="font-semibold" x-text="result.totais.api.itens.count"></span>
+                            <div class="pt-2">
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold font-mono"
+                                      :class="result.totais.api.movimento.receber === result.totais.local.movimento.receber && result.totais.api.movimento.recebido === result.totais.local.movimento.recebido && result.totais.api.movimento.count === result.totais.local.movimento.count ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'">
+                                    <i class="fa-solid" :class="result.totais.api.movimento.receber === result.totais.local.movimento.receber && result.totais.api.movimento.recebido === result.totais.local.movimento.recebido && result.totais.api.movimento.count === result.totais.local.movimento.count ? 'fa-circle-check' : 'fa-circle-xmark'"></i>
+                                    <span x-text="result.totais.api.movimento.receber === result.totais.local.movimento.receber && result.totais.api.movimento.recebido === result.totais.local.movimento.recebido && result.totais.api.movimento.count === result.totais.local.movimento.count ? 'Integração OK' : 'Divergente'"></span>
+                                </span>
                             </div>
-                            <div class="flex justify-between">
-                                <span class="text-slate-500">Local Bruto (sales):</span>
-                                <span class="font-semibold" x-text="formatCurrency(result.totais.local.itens.bruto)"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-slate-500">Local Líquido (sales):</span>
-                                <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.local.itens.liquido)"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-slate-500">Qtd Itens Local:</span>
-                                <span class="font-semibold" x-text="result.totais.local.itens.count"></span>
-                            </div>
-                        </div>
-                        <div class="pt-2">
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold font-mono"
-                                  :class="result.totais.api.itens.liquido === result.totais.local.itens.liquido && result.totais.api.itens.count === result.totais.local.itens.count ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'">
-                                <i class="fa-solid" :class="result.totais.api.itens.liquido === result.totais.local.itens.liquido && result.totais.api.itens.count === result.totais.local.itens.count ? 'fa-circle-check' : 'fa-circle-xmark'"></i>
-                                <span x-text="result.totais.api.itens.liquido === result.totais.local.itens.liquido && result.totais.api.itens.count === result.totais.local.itens.count ? 'Integração OK' : 'Divergente'"></span>
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- Pagamentos -->
-                    <div class="shadcn-card p-6 space-y-4">
-                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-                            <h3 class="text-sm font-bold tracking-tight text-slate-500 uppercase">Pagamentos Detalhados</h3>
-                            <i class="fa-solid fa-credit-card text-slate-400"></i>
-                        </div>
-                        <div class="space-y-3 font-mono text-xs">
-                            <div class="flex justify-between">
-                                <span class="text-slate-500">Soma API Pagamentos:</span>
-                                <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.api.pagamentos.valor)"></span>
-                            </div>
-                            <div class="flex justify-between border-b border-slate-100 pb-2">
-                                <span class="text-slate-500">Qtd Lançamentos API:</span>
-                                <span class="font-semibold" x-text="result.totais.api.pagamentos.count"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-slate-500">Soma Local Pagamentos:</span>
-                                <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.local.pagamentos.valor)"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-slate-500">Qtd Lançamentos Local:</span>
-                                <span class="font-semibold" x-text="result.totais.local.pagamentos.count"></span>
-                            </div>
-                        </div>
-                        <div class="pt-2">
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold font-mono"
-                                  :class="result.totais.api.pagamentos.valor === result.totais.local.pagamentos.valor && result.totais.api.pagamentos.count === result.totais.local.pagamentos.count ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'">
-                                <i class="fa-solid" :class="result.totais.api.pagamentos.valor === result.totais.local.pagamentos.valor && result.totais.api.pagamentos.count === result.totais.local.pagamentos.count ? 'fa-circle-check' : 'fa-circle-xmark'"></i>
-                                <span x-text="result.totais.api.pagamentos.valor === result.totais.local.pagamentos.valor && result.totais.api.pagamentos.count === result.totais.local.pagamentos.count ? 'Integração OK' : 'Divergente'"></span>
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- Movimentação Caixa -->
-                    <div class="shadcn-card p-6 space-y-4">
-                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-                            <h3 class="text-sm font-bold tracking-tight text-slate-500 uppercase">Movimentação Caixa</h3>
-                            <i class="fa-solid fa-university text-slate-400"></i>
-                        </div>
-                        <div class="space-y-3 font-mono text-xs">
-                            <div class="flex justify-between">
-                                <span class="text-slate-500">API Caixa Receber:</span>
-                                <span class="font-semibold" x-text="formatCurrency(result.totais.api.movimento.receber)"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-slate-500">API Caixa Recebido:</span>
-                                <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.api.movimento.recebido)"></span>
-                            </div>
-                            <div class="flex justify-between border-b border-slate-100 pb-2">
-                                <span class="text-slate-500">Qtd Movimentos API:</span>
-                                <span class="font-semibold" x-text="result.totais.api.movimento.count"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-slate-500">Local Caixa Receber:</span>
-                                <span class="font-semibold" x-text="formatCurrency(result.totais.local.movimento.receber)"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-slate-500">Local Caixa Recebido:</span>
-                                <span class="font-semibold text-slate-900" x-text="formatCurrency(result.totais.local.movimento.recebido)"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-slate-500">Qtd Movimentos Local:</span>
-                                <span class="font-semibold" x-text="result.totais.local.movimento.count"></span>
-                            </div>
-                        </div>
-                        <div class="pt-2">
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold font-mono"
-                                  :class="result.totais.api.movimento.receber === result.totais.local.movimento.receber && result.totais.api.movimento.recebido === result.totais.local.movimento.recebido && result.totais.api.movimento.count === result.totais.local.movimento.count ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'">
-                                <i class="fa-solid" :class="result.totais.api.movimento.receber === result.totais.local.movimento.receber && result.totais.api.movimento.recebido === result.totais.local.movimento.recebido && result.totais.api.movimento.count === result.totais.local.movimento.count ? 'fa-circle-check' : 'fa-circle-xmark'"></i>
-                                <span x-text="result.totais.api.movimento.receber === result.totais.local.movimento.receber && result.totais.api.movimento.recebido === result.totais.local.movimento.recebido && result.totais.api.movimento.count === result.totais.local.movimento.count ? 'Integração OK' : 'Divergente'"></span>
-                            </span>
                         </div>
                     </div>
                 </div>
 
-                <!-- Detalhes de Fechamentos Consolidados -->
-                <div class="shadcn-card p-6 space-y-4">
+                <!-- ABA 2: Itens API Menew -->
+                <div x-show="activeTab === 'api_itens'" class="space-y-4">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-list-check text-slate-400"></i> Produtos retornados na API Menew
+                        </h3>
+                        <div class="w-full md:w-80">
+                            <input type="text" x-model="searchApiQuery" placeholder="Filtrar por produto, código ou nota..." 
+                                   class="w-full p-2 text-xs shadcn-input">
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto border border-slate-200 rounded-lg bg-white shadow-sm">
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead>
+                                <tr class="border-b border-slate-200 bg-slate-50 font-semibold text-slate-500">
+                                    <th class="py-2.5 px-4">Nota / Operação</th>
+                                    <th class="py-2.5 px-4">Produto</th>
+                                    <th class="py-2.5 px-4 text-center">Quantidade</th>
+                                    <th class="py-2.5 px-4 text-right">Valor Unitário</th>
+                                    <th class="py-2.5 px-4 text-right">Valor Bruto</th>
+                                    <th class="py-2.5 px-4 text-right">Valor Líquido</th>
+                                    <th class="py-2.5 px-4 text-center font-mono">Modo</th>
+                                    <th class="py-2.5 px-4 text-center">JSON Bruto</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="item in filteredApiItens()" :key="item.idItemVenda">
+                                    <tr class="border-b border-slate-100 hover:bg-slate-50/50" 
+                                        :class="isItemApiDuplicated(item) ? 'bg-red-50/70 hover:bg-red-50' : ''">
+                                        <td class="py-3 px-4 font-mono font-bold">
+                                            <span x-text="item.__nfNumeroC ? 'NF ' + item.__nfNumeroC : 'Op ' + item.operacaoId.split('-').pop()"></span>
+                                        </td>
+                                        <td class="py-3 px-4">
+                                            <div class="font-medium text-slate-900" x-text="item.descricao"></div>
+                                            <div class="text-[10px] text-slate-400 font-mono" x-text="'Cód: ' + item.codMaterial + ' | Grupo: ' + item.grupo__descricao"></div>
+                                        </td>
+                                        <td class="py-3 px-4 text-center font-semibold font-mono" x-text="item.quantidade"></td>
+                                        <td class="py-3 px-4 text-right font-mono" x-text="formatCurrency(parseFloat(item.valorUnitario))"></td>
+                                        <td class="py-3 px-4 text-right font-mono" x-text="formatCurrency(parseFloat(item.valorBruto))"></td>
+                                        <td class="py-3 px-4 text-right font-mono font-medium text-slate-950" x-text="formatCurrency(parseFloat(item.valorLiquido))"></td>
+                                        <td class="py-3 px-4 text-center">
+                                            <span class="text-[10px] bg-slate-100 border border-slate-200 px-2 py-0.5 rounded font-mono font-bold" x-text="item.modoVenda"></span>
+                                        </td>
+                                        <td class="py-3 px-4 text-center">
+                                            <button @click="showRawJson(item.descricao, item)" 
+                                                    class="text-indigo-600 hover:text-indigo-900 text-[11px] font-bold font-mono">
+                                                [JSON]
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                                <template x-if="filteredApiItens().length === 0">
+                                    <tr>
+                                        <td colspan="8" class="text-center py-10 text-slate-400 font-mono">Nenhum item corresponde ao filtro.</td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ABA 3: Itens Banco Local (sales) -->
+                <div x-show="activeTab === 'local_itens'" class="space-y-4">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-database text-slate-400"></i> Produtos gravados no banco local (tabela `sales`)
+                        </h3>
+                        <div class="w-full md:w-80">
+                            <input type="text" x-model="searchLocalQuery" placeholder="Filtrar por produto, código ou nota..." 
+                                   class="w-full p-2 text-xs shadcn-input">
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto border border-slate-200 rounded-lg bg-white shadow-sm">
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead>
+                                <tr class="border-b border-slate-200 bg-slate-50 font-semibold text-slate-500">
+                                    <th class="py-2.5 px-4">Nota Fiscal</th>
+                                    <th class="py-2.5 px-4">Produto</th>
+                                    <th class="py-2.5 px-4 text-right">Valor Bruto</th>
+                                    <th class="py-2.5 px-4 text-right">Valor Líquido</th>
+                                    <th class="py-2.5 px-4 font-mono">Lançamento</th>
+                                    <th class="py-2.5 px-4 text-center">ID Registro Local</th>
+                                    <th class="py-2.5 px-4 text-center">JSON Bruto</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="item in filteredLocalItens()" :key="item.idItemVenda">
+                                    <tr class="border-b border-slate-100 hover:bg-slate-50/50" 
+                                        :class="isItemLocalDuplicated(item) ? 'bg-red-50/70 hover:bg-red-50' : ''">
+                                        <td class="py-3 px-4 font-mono font-bold" x-text="item.__nfNumeroC ? 'NF ' + item.__nfNumeroC : 'Sem Nota'"></td>
+                                        <td class="py-3 px-4">
+                                            <div class="font-medium text-slate-900" x-text="item.descricao"></div>
+                                            <div class="text-[10px] text-slate-400 font-mono" x-text="'Cód: ' + item.codMaterial"></div>
+                                        </td>
+                                        <td class="py-3 px-4 text-right font-mono" x-text="formatCurrency(parseFloat(item.valorBruto))"></td>
+                                        <td class="py-3 px-4 text-right font-mono font-medium text-slate-955" x-text="formatCurrency(parseFloat(item.valorLiquido))"></td>
+                                        <td class="py-3 px-4 font-mono text-[11px] text-slate-500" x-text="item.dtLancamento"></td>
+                                        <td class="py-3 px-4 text-center font-mono text-[10px] text-slate-400" x-text="item.idItemVenda"></td>
+                                        <td class="py-3 px-4 text-center">
+                                            <button @click="showRawJson(item.descricao, item)" 
+                                                    class="text-indigo-600 hover:text-indigo-900 text-[11px] font-bold font-mono">
+                                                [JSON]
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                                <template x-if="filteredLocalItens().length === 0">
+                                    <tr>
+                                        <td colspan="7" class="text-center py-10 text-slate-400 font-mono">Nenhum item corresponde ao filtro.</td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ABA 4: Fechamentos Consolidados -->
+                <div x-show="activeTab === 'fechamento'" class="space-y-4">
                     <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
                         <i class="fa-solid fa-file-invoice-dollar text-slate-500"></i>
                         Fechamento de Caixa Consolidado (da API `fechamentocaixa`)
                     </h3>
-                    <div class="overflow-x-auto">
+                    <div class="overflow-x-auto border border-slate-200 rounded-lg bg-white shadow-sm">
                         <table class="w-full text-left border-collapse text-xs">
                             <thead>
-                                <tr class="border-b border-slate-200 bg-slate-50">
-                                    <th class="py-2.5 px-4 font-semibold text-slate-500">Operador</th>
-                                    <th class="py-2.5 px-4 font-semibold text-slate-500">Horário Abertura/Fechamento</th>
-                                    <th class="py-2.5 px-4 font-semibold text-slate-500 text-right">Dinheiro Computado</th>
-                                    <th class="py-2.5 px-4 font-semibold text-slate-500 text-right">Cartão Computado</th>
-                                    <th class="py-2.5 px-4 font-semibold text-slate-500">Outras Formas Detalhadas</th>
+                                <tr class="border-b border-slate-200 bg-slate-50 font-semibold text-slate-500">
+                                    <th class="py-2.5 px-4">Operador</th>
+                                    <th class="py-2.5 px-4">Horário Abertura/Fechamento</th>
+                                    <th class="py-2.5 px-4 text-right">Dinheiro Computado</th>
+                                    <th class="py-2.5 px-4 text-right">Cartão Computado</th>
+                                    <th class="py-2.5 px-4">Outras Formas Detalhadas</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -364,6 +498,32 @@
         
     </main>
 
+    <!-- Modal Visualizador de JSON do Shadcn/ui -->
+    <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" x-show="modalOpen" style="display:none;" x-transition>
+        <div class="bg-white border border-slate-200 shadow-xl rounded-xl max-w-2xl w-full max-h-[80vh] flex flex-col" @click.away="modalOpen = false">
+            <!-- Header do Modal -->
+            <div class="p-5 border-b border-slate-200 flex justify-between items-center">
+                <div>
+                    <h3 class="text-sm font-bold tracking-tight text-slate-900" x-text="modalTitle"></h3>
+                    <p class="text-xs text-slate-500">Objeto de dados bruto da API Menew</p>
+                </div>
+                <button @click="modalOpen = false" class="text-slate-400 hover:text-slate-700 p-1.5 hover:bg-slate-100 rounded-md transition">
+                    <i class="fa-solid fa-xmark text-base"></i>
+                </button>
+            </div>
+            <!-- Body do Modal -->
+            <div class="p-6 overflow-y-auto flex-1 bg-slate-900 text-slate-100 font-mono text-xs leading-relaxed">
+                <pre x-text="JSON.stringify(modalJsonContent, null, 2)" class="overflow-x-auto"></pre>
+            </div>
+            <!-- Footer do Modal -->
+            <div class="p-4 border-t border-slate-200 flex justify-end">
+                <button @click="modalOpen = false" class="py-1.5 px-4 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-md transition">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Footer -->
     <footer class="border-t border-slate-200 bg-white py-4 px-6 text-center text-xs text-slate-400 font-mono mt-auto">
         MRK Soluções de TI © 2026 | Visual Estético Shadcn/ui & Tailwind CSS
@@ -377,6 +537,14 @@
                 selectedDate: '',
                 loading: false,
                 result: null,
+                activeTab: 'geral',
+                searchApiQuery: '',
+                searchLocalQuery: '',
+
+                // Modal
+                modalOpen: false,
+                modalTitle: '',
+                modalJsonContent: {},
 
                 async init() {
                     try {
@@ -391,6 +559,8 @@
                 async runAnalysis() {
                     this.loading = true;
                     this.result = null;
+                    this.searchApiQuery = '';
+                    this.searchLocalQuery = '';
 
                     try {
                         const res = await axios.post('/jobs/api/analise-menew/cruzamento', {
@@ -404,6 +574,54 @@
                     } finally {
                         this.loading = false;
                     }
+                },
+
+                filteredApiItens() {
+                    if (!this.result || !this.result.raw.api_itens) return [];
+                    const q = this.searchApiQuery.toLowerCase().trim();
+                    if (!q) return this.result.raw.api_itens;
+                    return this.result.raw.api_itens.filter(item => {
+                        const desc = (item.descricao || '').toLowerCase();
+                        const cod = (item.codMaterial || '').toString();
+                        const nota = (item.__nfNumeroC || '').toString();
+                        const op = (item.operacaoId || '').toLowerCase();
+                        return desc.includes(q) || cod.includes(q) || nota.includes(q) || op.includes(q);
+                    });
+                },
+
+                filteredLocalItens() {
+                    if (!this.result || !this.result.raw.local_itens) return [];
+                    const q = this.searchLocalQuery.toLowerCase().trim();
+                    if (!q) return this.result.raw.local_itens;
+                    return this.result.raw.local_itens.filter(item => {
+                        const desc = (item.descricao || '').toLowerCase();
+                        const cod = (item.codMaterial || '').toString();
+                        const nota = (item.__nfNumeroC || '').toString();
+                        return desc.includes(q) || cod.includes(q) || nota.includes(q);
+                    });
+                },
+
+                isItemApiDuplicated(item) {
+                    if (!this.result || !this.result.auditoria.alertasDuplicidade) return false;
+                    // Verifica se o id da operação do item coincide com algum alerta de num_controle reutilizado
+                    return this.result.auditoria.alertasDuplicidade.some(dup => {
+                        return dup.tipo === 'num_controle_reutilizado' && item.operacaoId.includes(dup.chave);
+                    });
+                },
+
+                isItemLocalDuplicated(item) {
+                    if (!this.result || !this.result.auditoria.alertasDuplicidade) return false;
+                    // Coincide se o item pertence a alguma chave de duplicidade de contingência mapeada (nota-codMaterial-valorLiquido)
+                    const chave = `${item.__nfNumeroC || 'SemNota'}-${item.codMaterial}-${item.valorLiquido}`;
+                    return this.result.auditoria.alertasDuplicidade.some(dup => {
+                        return dup.tipo === 'itens_duplicados_contingencia' && dup.chave === chave;
+                    });
+                },
+
+                showRawJson(title, json) {
+                    this.modalTitle = title;
+                    this.modalJsonContent = json;
+                    this.modalOpen = true;
                 },
 
                 formatCurrency(value) {
