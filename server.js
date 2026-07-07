@@ -421,6 +421,12 @@ router.post('/api/analise-menew/cruzamento', async (req, res) => {
             auditoria: {
                 omissoes,
                 alertasDuplicidade
+            },
+            raw: {
+                api_itens: apiItem?.result || [],
+                local_itens: dbSalesRows,
+                menew_fechamento: apiFech?.result || [],
+                menew_pagamentos: apiPag?.result || []
             }
         });
 
