@@ -240,6 +240,8 @@ router.post('/api/analise-menew/cruzamento', async (req, res) => {
                 totalApiMov.recebido += parseFloat(m.vlTotalRecebido || 0);
             });
         }
+        totalApiMov.receber = Math.round(totalApiMov.receber * 100) / 100;
+        totalApiMov.recebido = Math.round(totalApiMov.recebido * 100) / 100;
 
         const totalApiPag = { valor: 0, count: apiPag?.result?.length || 0, formas: {} };
         if (apiPag?.result) {
@@ -249,6 +251,10 @@ router.post('/api/analise-menew/cruzamento', async (req, res) => {
                 totalApiPag.formas[p.descricao] = (totalApiPag.formas[p.descricao] || 0) + val;
             });
         }
+        totalApiPag.valor = Math.round(totalApiPag.valor * 100) / 100;
+        for (const f in totalApiPag.formas) {
+            totalApiPag.formas[f] = Math.round(totalApiPag.formas[f] * 100) / 100;
+        }
 
         const totalApiItem = { bruto: 0, liquido: 0, count: apiItem?.result?.length || 0 };
         if (apiItem?.result) {
@@ -257,12 +263,16 @@ router.post('/api/analise-menew/cruzamento', async (req, res) => {
                 totalApiItem.liquido += parseFloat(i.valorLiquido || 0);
             });
         }
+        totalApiItem.bruto = Math.round(totalApiItem.bruto * 100) / 100;
+        totalApiItem.liquido = Math.round(totalApiItem.liquido * 100) / 100;
 
         const totalDbMov = { receber: 0, recebido: 0, count: dbMovRows.length };
         dbMovRows.forEach(m => {
             totalDbMov.receber += parseFloat(m.vlTotalReceber || 0);
             totalDbMov.recebido += parseFloat(m.vlTotalRecebido || 0);
         });
+        totalDbMov.receber = Math.round(totalDbMov.receber * 100) / 100;
+        totalDbMov.recebido = Math.round(totalDbMov.recebido * 100) / 100;
 
         const totalDbPag = { valor: 0, count: dbPagRows.length, formas: {} };
         dbPagRows.forEach(p => {
@@ -270,12 +280,18 @@ router.post('/api/analise-menew/cruzamento', async (req, res) => {
             totalDbPag.valor += val;
             totalDbPag.formas[p.descricao] = (totalDbPag.formas[p.descricao] || 0) + val;
         });
+        totalDbPag.valor = Math.round(totalDbPag.valor * 100) / 100;
+        for (const f in totalDbPag.formas) {
+            totalDbPag.formas[f] = Math.round(totalDbPag.formas[f] * 100) / 100;
+        }
 
         const totalDbItem = { bruto: 0, liquido: 0, count: dbSalesRows.length };
         dbSalesRows.forEach(i => {
             totalDbItem.bruto += parseFloat(i.valorBruto || 0);
             totalDbItem.liquido += parseFloat(i.valorLiquido || 0);
         });
+        totalDbItem.bruto = Math.round(totalDbItem.bruto * 100) / 100;
+        totalDbItem.liquido = Math.round(totalDbItem.liquido * 100) / 100;
 
         // 6. Fechamentos consolidados
         const fechamentoFormatado = [];
@@ -284,18 +300,18 @@ router.post('/api/analise-menew/cruzamento', async (req, res) => {
                 const formasFechamento = {};
                 if (f.cartao_detalhado) {
                     f.cartao_detalhado.forEach(c => {
-                        formasFechamento[c.descricao] = parseFloat(c.vl_sistema || 0);
+                        formasFechamento[c.descricao] = Math.round(parseFloat(c.vl_sistema || 0) * 100) / 100;
                     });
                 }
                 if (f.outros_pagamentos) {
                     f.outros_pagamentos.forEach(o => {
                         // Limpa "OUTROS - " do nome se houver
                         const desc = o.descricao.replace('OUTROS - ', '');
-                        formasFechamento[desc] = parseFloat(o.valor || 0);
+                        formasFechamento[desc] = Math.round(parseFloat(o.valor || 0) * 100) / 100;
                     });
                 }
                 if (parseFloat(f.dinheiro_computado) > 0) {
-                    formasFechamento['DINHEIRO'] = parseFloat(f.dinheiro_computado || 0);
+                    formasFechamento['DINHEIRO'] = Math.round(parseFloat(f.dinheiro_computado || 0) * 100) / 100;
                 }
 
                 fechamentoFormatado.push({
