@@ -144,24 +144,24 @@ async function run(importId) {
                 continue;
             }
 
-            const codProduto = padRow[12];
-            const descProduto = padRow[13];
-            const quantidade = parseBRL(padRow[15]);
-            const valorUnitario = parseBRL(padRow[16]);
-            const valorBruto = parseBRL(padRow[17]);
-            const descontoItem = parseBRL(padRow[18]);
-            const valorItemLiquido = parseBRL(padRow[19]);
+            const codProduto = padRow[16];
+            const descProduto = padRow[17];
+            const quantidade = parseBRL(padRow[18]);
+            const valorBruto = parseBRL(padRow[19]);
+            const descontoItem = parseBRL(padRow[45]);
+            const valorItemLiquido = valorBruto - descontoItem;
+            const valorUnitario = quantidade > 0 ? (valorBruto / quantidade) : 0.0;
 
-            const dataHoraEmissao = formatToISODate(padRow[2]);
-            const horaAbert = padRow[22];
+            const dataHoraEmissao = dataCaixa;
+            const horaAbert = padRow[1];
 
-            const codPagto = padRow[34];
-            const descrPagto = padRow[35];
-            const valorPagto = parseBRL(padRow[37]);
-            const operadora = padRow[41];
-            const nsu = padRow[42];
-            const autorizacao = padRow[43];
-            const tipoOperacao = padRow[44];
+            const codPagto = padRow[30];
+            const descrPagto = padRow[31];
+            const valorPagto = parseBRL(padRow[32]);
+            const operadora = padRow[33];
+            const tipoOperacao = padRow[34];
+            const nsu = padRow[35];
+            const autorizacao = padRow[36];
 
             const chaveUnique = notaFiscal;
 
