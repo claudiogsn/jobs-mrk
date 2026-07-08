@@ -175,7 +175,7 @@ router.get('/doc-menew', (req, res) => {
     res.sendFile(path.join(__dirname, 'views/doc_endpoints_menew.html'));
 });
 
-const { run3lmImportById } = require('./workers/worker3lmImport');
+const { run3lmImportById, run3lmExclusaoById } = require('./workers/worker3lmImport');
 
 router.post('/api/3lm/importar', async (req, res) => {
     try {
@@ -192,6 +192,24 @@ router.post('/api/3lm/importar', async (req, res) => {
         return res.status(200).json({ success: true, message: `Importação #${import_id} iniciada em background.` });
     } catch (e) {
         return res.status(500).json({ success: false, message: 'Erro interno ao iniciar processamento: ' + e.message });
+    }
+});
+
+router.post('/api/3lm/excluir', async (req, res) => {
+    try {
+        const { import_id, system_unit_id } = req.body;
+        if (!import_id || !system_unit_id) {
+            return res.status(400).json({ success: false, message: 'Parâmetros import_id e system_unit_id são obrigatórios.' });
+        }
+
+        // Executa em segundo plano de forma assíncrona (liberando a resposta HTTP imediatamente)
+        run3lmExclusaoById(parseInt(import_id), parseInt(system_unit_id)).catch(err => {
+            log(`[3LM API Route] ❌ Erro ao processar exclusão da importacao #${import_id}: ${err.message}`, '3lm_import');
+        });
+
+        return res.status(200).json({ success: true, message: `Exclusão da importação #${import_id} iniciada em background.` });
+    } catch (e) {
+        return res.status(500).json({ success: false, message: 'Erro interno ao iniciar exclusão: ' + e.message });
     }
 });
 

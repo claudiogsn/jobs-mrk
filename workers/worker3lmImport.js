@@ -248,7 +248,7 @@ async function run(importId) {
                 WHERE lojaId = ? 
                   AND dataContabil IN (${placeholders}) 
                   AND num_controle LIKE '3lm-%'
-            `, [parseInt(customCode), ...datasArray]);
+            `, [customCode.toString(), ...datasArray]);
 
             log(`[3LM Import #${importId}]   -> Limpando em lote da tabela api_pagamentos...`, '3lm_import');
             await conn.execute(`
@@ -256,7 +256,7 @@ async function run(importId) {
                 WHERE id_loja = ? 
                   AND data_contabil IN (${placeholders}) 
                   AND id_operacao LIKE '3lm-%'
-            `, [parseInt(customCode), ...datasArray]);
+            `, [customCode.toString(), ...datasArray]);
         }
 
         let orderCount = 0;
@@ -534,9 +534,190 @@ async function run(importId) {
             } catch (errDb) {
                 log(`[3LM Import] ❌ Falha crítica ao salvar status de erro no MySQL: ${errDb.message}`, '3lm_import');
             }
+        }
+    }
+}
+
+async function runExclusao(importId, systemUnitId) {
+    if (!importId || !systemUnitId) {
+        log('❌ Erro no worker de exclusão: importId ou systemUnitId ausente.', '3lm_import');
+        return;
+    }
+    let conn = null;
+    try {
+        conn = await getConnection();
+
+        // 1. Busca a importação para obter período e nome do arquivo
+        const [rows] = await conn.execute(
+            "SELECT data_inicio_faturamento, data_fim_faturamento, nome_arquivo, usuario_id FROM 3lm_imports WHERE id = ? AND system_unit_id = ?",
+            [importId, systemUnitId]
+        );
+
+        if (rows.length === 0) {
+            log(`[3LM Exclusão #${importId}] ⚠️ Importação não encontrada no banco de dados.`, '3lm_import');
+            conn.end();
+            return;
+        }
+
+        const dataInicio = rows[0].data_inicio_faturamento;
+        const dataFim = rows[0].data_fim_faturamento;
+        const nomeArquivo = rows[0].nome_arquivo;
+        const usuarioId = rows[0].usuario_id;
+
+        // 2. Busca custom_code e name da unidade
+        const [units] = await conn.execute("SELECT name, custom_code FROM system_unit WHERE id = ?", [systemUnitId]);
+        if (units.length === 0) {
+            log(`[3LM Exclusão #${importId}] ⚠️ Unidade ${systemUnitId} não encontrada.`, '3lm_import');
+            conn.end();
+            return;
+        }
+
+        const unitName = units[0].name;
+        const customCode = units[0].custom_code || systemUnitId.toString();
+
+        log(`[3LM Exclusão #${importId}] 🚀 Iniciando exclusão assíncrona da importação ${nomeArquivo}...`, '3lm_import');
+
+        // Formata as datas para YYYY-MM-DD
+        let formattedDataInicio = null;
+        let formattedDataFim = null;
+        if (dataInicio) {
+            formattedDataInicio = dataInicio instanceof Date 
+                ? DateTime.fromJSDate(dataInicio).toISODate() 
+                : formatToISODate(dataInicio.toString());
+        }
+        if (dataFim) {
+            formattedDataFim = dataFim instanceof Date 
+                ? DateTime.fromJSDate(dataFim).toISODate() 
+                : formatToISODate(dataFim.toString());
+        }
+
+        // Se não tiver datas, não há registros associados para excluir nas outras tabelas, podemos apenas remover o metadado
+        if (formattedDataInicio && formattedDataFim) {
+            log(`[3LM Exclusão #${importId}] 🔒 Iniciando transação para limpar dados do período ${formattedDataInicio} a ${formattedDataFim}...`, '3lm_import');
+            await conn.beginTransaction();
+
+            // 2.1. Deleta da api_pagamentos
+            log(`[3LM Exclusão #${importId}]   -> Removendo registros da api_pagamentos...`, '3lm_import');
+            await conn.execute(`
+                DELETE FROM api_pagamentos 
+                WHERE id_loja = ? 
+                  AND data_contabil BETWEEN ? AND ? 
+                  AND origem = '3LM'
+            `, [customCode.toString(), formattedDataInicio, formattedDataFim]);
+
+            // 2.2. Deleta da movimento_caixa
+            log(`[3LM Exclusão #${importId}]   -> Removendo registros da movimento_caixa...`, '3lm_import');
+            await conn.execute(`
+                DELETE FROM movimento_caixa 
+                WHERE lojaId = ? 
+                  AND dataContabil BETWEEN ? AND ? 
+                  AND rede = '3LM PDV'
+            `, [customCode.toString(), formattedDataInicio, formattedDataFim]);
+
+            // 2.3. Deleta da sales
+            log(`[3LM Exclusão #${importId}]   -> Removendo registros da sales...`, '3lm_import');
+            await conn.execute(`
+                DELETE FROM sales 
+                WHERE system_unit_id = ? 
+                  AND dtLancamento BETWEEN ? AND ? 
+                  AND idItemVenda LIKE '3lm-%'
+            `, [systemUnitId, `${formattedDataInicio} 00:00:00`, `${formattedDataFim} 23:59:59`]);
+
+            // 2.4. Deleta da _bi_sales
+            log(`[3LM Exclusão #${importId}]   -> Removendo registros da _bi_sales...`, '3lm_import');
+            await conn.execute(`
+                DELETE FROM _bi_sales 
+                WHERE system_unit_id = ? 
+                  AND data_movimento BETWEEN ? AND ? 
+                  AND custom_code = ?
+            `, [systemUnitId, `${formattedDataInicio} 00:00:00`, `${formattedDataFim} 23:59:59`, customCode]);
+
+            await conn.commit();
+            log(`[3LM Exclusão #${importId}] 💾 Dados limpos do banco de dados com sucesso.`, '3lm_import');
+
+            // 3. Sincroniza estoque e BI (Processando datas no backend PHP)
+            log(`[3LM Exclusão #${importId}] ⚡ Iniciando sincronização pós-exclusão...`, '3lm_import');
+
+            // Gera lista de datas no período para sincronizar estoque
+            const start = DateTime.fromISO(formattedDataInicio);
+            const end = DateTime.fromISO(formattedDataFim);
+            const diffDays = Math.round(end.diff(start, 'days').days);
+            const datasArray = [];
+            for (let i = 0; i <= diffDays; i++) {
+                datasArray.push(start.plus({ days: i }).toISODate());
+            }
+
+            for (const dataRef of datasArray) {
+                try {
+                    log(`[3LM Exclusão #${importId}]   -> Sincronizando estoque para a data ${dataRef}...`, '3lm_import');
+                    await callPHP('importMovBySalesCons', { system_unit_id: systemUnitId, data: dataRef });
+                } catch (errEstoque) {
+                    log(`[3LM Exclusão #${importId}] ⚠️ Falha na consolidação de estoque da data ${dataRef}: ${errEstoque.message}`, '3lm_import');
+                }
+            }
+
+            // Sincroniza BI
+            try {
+                log(`[3LM Exclusão #${importId}]   -> Sincronizando BI para o período de ${formattedDataInicio} a ${formattedDataFim}...`, '3lm_import');
+                await callPHP('consolidateSalesByUnit', {
+                    system_unit_id: systemUnitId,
+                    dt_inicio: `${formattedDataInicio} 00:00:00`,
+                    dt_fim: `${formattedDataFim} 23:59:59`
+                });
+            } catch (errBi) {
+                log(`[3LM Exclusão #${importId}] ⚠️ Falha na consolidação do BI pós-exclusão: ${errBi.message}`, '3lm_import');
+            }
+        }
+
+        // 4. Remove a importação da tabela 3lm_imports e o arquivo CSV
+        await conn.execute("DELETE FROM 3lm_imports WHERE id = ?", [importId]);
+
+        const filePath = path.join(UPLOAD_3LM_DIR, `import_${importId}.csv`);
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+
+        log(`[3LM Exclusão #${importId}] 🔔 Gerando notificação de exclusão no painel do usuário...`, '3lm_import');
+        if (usuarioId) {
+            const dtMsg = DateTime.now().setZone('America/Sao_Paulo').toFormat('yyyy-MM-dd HH:mm:ss');
+            const [[maxIdRow]] = await conn.execute("SELECT COALESCE(MAX(id), 0) + 1 AS nextId FROM system_notification");
+            const nextId = maxIdRow.nextId;
+
+            await conn.execute(`
+                INSERT INTO system_notification (
+                    id, system_user_id, system_user_to_id, subject, message, dt_message, action_url, action_label, icon, checked
+                ) VALUES (?, 1, ?, ?, ?, ?, 'index.php?class=Importador3lmList', 'Visualizar no Portal', 'far:check-circle text-success', 'N')
+            `, [
+                nextId,
+                usuarioId,
+                'Exclusão 3LM Concluída',
+                `Os dados da planilha de faturamento '${nomeArquivo}' foram completamente excluídos com sucesso.`,
+                dtMsg
+            ]);
+        }
+
+        log(`[3LM Exclusão #${importId}] Processo concluído com sucesso.`, '3lm_import');
+        conn.end();
+
+    } catch (error) {
+        log(`[3LM Exclusão] ❌ Erro durante a exclusão: ${error.message}`, '3lm_import');
+        if (conn) {
+            try {
+                await conn.rollback();
+            } catch (_) {}
+            
+            // Caso ocorra erro, atualiza a importação para status = 'erro' com a mensagem de erro
+            try {
+                await conn.execute("UPDATE 3lm_imports SET status = 'erro', mensagem_erro = ? WHERE id = ?", [error.message, importId]);
+            } catch (errDb) {
+                log(`[3LM Exclusão] ❌ Falha crítica ao salvar status de erro da exclusão no MySQL: ${errDb.message}`, '3lm_import');
+            }
             conn.end();
         }
     }
 }
 
-module.exports = { run3lmImportById: run };
+module.exports = { 
+    run3lmImportById: run,
+    run3lmExclusaoById: runExclusao
+};
