@@ -49,6 +49,45 @@ function formatToISODate(dateStr) {
     return dateStr;
 }
 
+function map3lmPaymentType(tipoOperacao, descrPagto) {
+    const desc = (descrPagto || '').toUpperCase().trim();
+    const oper = (tipoOperacao || '').toUpperCase().trim();
+
+    // 1. Verifica pelo tipoOperacao primeiro
+    if (oper === 'VD CRED') {
+        return { id_tipo: 3, tipo_pagamento: 'Cartão Crédito' };
+    }
+    if (oper === 'VD DEB') {
+        return { id_tipo: 4, tipo_pagamento: 'Cartão Débito' };
+    }
+    if (oper === 'PIX') {
+        return { id_tipo: 99, tipo_pagamento: 'Outros' };
+    }
+    if (oper === 'VD VOUCH') {
+        return { id_tipo: 11, tipo_pagamento: 'Refeição' };
+    }
+
+    // 2. Fallback pela descrição
+    if (desc.includes('CRED') || desc.includes('AMEX')) {
+        return { id_tipo: 3, tipo_pagamento: 'Cartão Crédito' };
+    }
+    if (desc.includes('DEB') || desc.includes('DEBITO')) {
+        return { id_tipo: 4, tipo_pagamento: 'Cartão Débito' };
+    }
+    if (desc.includes('PIX')) {
+        return { id_tipo: 99, tipo_pagamento: 'Outros' };
+    }
+    if (desc.includes('DINHEIRO') || desc.includes('MONEY')) {
+        return { id_tipo: 1, tipo_pagamento: 'Dinheiro' };
+    }
+    if (desc.includes('ALELO') || desc.includes('SODEXO') || desc.includes('TICKET') || desc.includes('VOUCH') || desc.includes('VALE')) {
+        return { id_tipo: 11, tipo_pagamento: 'Refeição' };
+    }
+
+    // Fallback padrão
+    return { id_tipo: 99, tipo_pagamento: 'Outros' };
+}
+
 async function run(importId) {
     if (!importId) {
         log('❌ Erro no worker: importId ausente.', '3lm_import');
@@ -277,18 +316,19 @@ async function run(importId) {
             for (const pay of paymentsList) {
                 payIndex++;
                 const payUuid = randomUUID();
+                const paymentMapping = map3lmPaymentType(pay.tipo_operacao, pay.descr_pagto);
 
                 await conn.execute(`
                     INSERT INTO api_pagamentos (
                         uuid, id_operacao, id_loja, nome_loja, num_pedido, seq_pedido, 
                         data_contabil, status_pagamento, data_lancamento, hora_lancamento, 
                         id_m, descricao, data_vencimento, valor, valor_liquido, 
-                        nsu, adquirente, autorizacao, tipo_pagamento, origem
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '3LM')
+                        nsu, adquirente, autorizacao, id_tipo, tipo_pagamento, origem
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '3LM')
                 `, [
                     payUuid,
                     idOperacao,
-                    parseInt(customCode),
+                    customCode.toString(),
                     unitName,
                     parseInt(notaFiscal),
                     payIndex,
@@ -304,7 +344,8 @@ async function run(importId) {
                     pay.nsu || null,
                     pay.operadora || null,
                     pay.autorizacao || null,
-                    pay.tipo_operacao || null
+                    paymentMapping.id_tipo,
+                    paymentMapping.tipo_pagamento
                 ]);
             }
 
@@ -347,7 +388,7 @@ async function run(importId) {
                     'BALCAO',
                     quantidade,
                     'UND',
-                    parseInt(customCode),
+                    customCode.toString(),
                     codMaterial,
                     codMaterial,
                     item.descricao,
@@ -367,14 +408,15 @@ async function run(importId) {
             await conn.execute(`
                 INSERT INTO movimento_caixa (
                     id, num_controle, dataAbertura, dataContabil, 
-                    lojaId, loja, vlTotalReceber, vlTotalRecebido, vlDesconto, rede
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '3LM PDV')
+                    lojaId, loja, vlTotalReceber, vlTotalRecebido, vlDesconto, rede,
+                    cancelado, numPessoas, modoVenda2
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '3LM PDV', 0, 1, 'BALCAO')
             `, [
                 idOperacao,
                 idOperacao,
                 `${dataContabil} ${order.hora_abert || '00:00:00'}`,
                 dataContabil,
-                parseInt(customCode),
+                customCode.toString(),
                 unitName,
                 somaBruto,
                 somaPagamentos,
