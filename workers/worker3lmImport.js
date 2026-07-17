@@ -302,21 +302,22 @@ async function run(importId) {
             `, [systemUnitId, ...datasArray]);
 
             log(`[3LM Import #${importId}]   -> Limpando em lote da tabela movimento_caixa...`, '3lm_import');
+            // lojaId é numérico nas tabelas de movimentação; customCode pode ser UUID.
             await conn.execute(`
                 DELETE FROM movimento_caixa 
                 WHERE lojaId = ? 
                   AND dataContabil IN (${placeholders}) 
                   AND num_controle LIKE '3lm-%'
-            `, [customCode.toString(), ...datasArray]);
+            `, [systemUnitId, ...datasArray]);
 
             log(`[3LM Import #${importId}]   -> Limpando em lote da tabela api_pagamentos...`, '3lm_import');
+            // api_pagamentos.id_loja é INT. Algumas unidades (ex.: Casa Iryna)
+            // usam UUID em custom_code, portanto aqui deve ser sempre o id interno.
             await conn.execute(`
                 DELETE FROM api_pagamentos
                 WHERE id_loja = ?
                   AND data_contabil IN (${placeholders})
                   AND id_operacao LIKE '3lm-%'
-            // api_pagamentos.id_loja é INT. Algumas unidades (ex.: Casa Iryna)
-            // usam UUID em custom_code, portanto aqui deve ser sempre o id interno.
             `, [systemUnitId, ...datasArray]);
 
             // consolidateSalesByUnit soma no que já existe (ON DUPLICATE KEY UPDATE valor = valor + novo),
@@ -420,7 +421,8 @@ async function run(importId) {
                     'BALCAO',
                     quantidade,
                     'UND',
-                    customCode.toString(),
+                    // sales.lojaId é INT; o UUID permanece em sales.custom_code.
+                    systemUnitId,
                     codMaterial,
                     codMaterial,
                     item.descricao,
@@ -448,7 +450,8 @@ async function run(importId) {
                 idOperacao,
                 `${dataContabil} ${order.hora_abert || '00:00:00'}`,
                 dataContabil,
-                customCode.toString(),
+                // movimento_caixa.lojaId é numérico; use o ID interno da unidade.
+                systemUnitId,
                 unitName,
                 somaBruto,
                 somaPagamentos,
@@ -684,7 +687,7 @@ async function runExclusao(importId, systemUnitId) {
                 WHERE lojaId = ? 
                   AND dataContabil BETWEEN ? AND ? 
                   AND rede = '3LM PDV'
-            `, [customCode.toString(), formattedDataInicio, formattedDataFim]);
+            `, [systemUnitId, formattedDataInicio, formattedDataFim]);
 
             // 2.3. Deleta da sales
             log(`[3LM Exclusão #${importId}]   -> Removendo registros da sales...`, '3lm_import');
