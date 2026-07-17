@@ -152,6 +152,7 @@ async function run(importId) {
         }
         const unitName = unitRows[0].name;
         const customCode = unitRows[0].custom_code || String(systemUnitId);
+        log(`[3LM Import #${importId}] Unidade resolvida: id=${systemUnitId}, custom_code=${customCode}, nome=${unitName}.`, '3lm_import');
 
         // 5. Carrega mapeamento de produtos (de-para)
         const [prodRows] = await conn.execute("SELECT codigo, codigo_pdv FROM products WHERE system_unit_id = ?", [systemUnitId]);
@@ -302,13 +303,14 @@ async function run(importId) {
             `, [systemUnitId, ...datasArray]);
 
             log(`[3LM Import #${importId}]   -> Limpando em lote da tabela movimento_caixa...`, '3lm_import');
-            // lojaId é numérico nas tabelas de movimentação; customCode pode ser UUID.
+            // movimento_caixa.lojaId é VARCHAR e possui valores UUID legados. Envie o
+            // id interno como texto para impedir coerção numérica da coluna pelo MySQL.
             await conn.execute(`
                 DELETE FROM movimento_caixa 
                 WHERE lojaId = ? 
                   AND dataContabil IN (${placeholders}) 
                   AND num_controle LIKE '3lm-%'
-            `, [systemUnitId, ...datasArray]);
+            `, [String(systemUnitId), ...datasArray]);
 
             log(`[3LM Import #${importId}]   -> Limpando em lote da tabela api_pagamentos...`, '3lm_import');
             // api_pagamentos.id_loja é INT. Algumas unidades (ex.: Casa Iryna)
@@ -450,8 +452,8 @@ async function run(importId) {
                 idOperacao,
                 `${dataContabil} ${order.hora_abert || '00:00:00'}`,
                 dataContabil,
-                // movimento_caixa.lojaId é numérico; use o ID interno da unidade.
-                systemUnitId,
+                // movimento_caixa.lojaId é VARCHAR; mantenha o ID interno como texto.
+                String(systemUnitId),
                 unitName,
                 somaBruto,
                 somaPagamentos,
@@ -687,7 +689,7 @@ async function runExclusao(importId, systemUnitId) {
                 WHERE lojaId = ? 
                   AND dataContabil BETWEEN ? AND ? 
                   AND rede = '3LM PDV'
-            `, [systemUnitId, formattedDataInicio, formattedDataFim]);
+            `, [String(systemUnitId), formattedDataInicio, formattedDataFim]);
 
             // 2.3. Deleta da sales
             log(`[3LM Exclusão #${importId}]   -> Removendo registros da sales...`, '3lm_import');
