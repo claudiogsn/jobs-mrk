@@ -49,6 +49,16 @@ function formatToISODate(dateStr) {
     return dateStr;
 }
 
+// A coluna movimento_caixa.hora é um int (hora cheia, 0-23), e não um TIME.
+function parseHoraToInt(horaStr) {
+    const h = parseInt((horaStr || '').split(':')[0], 10);
+    return (Number.isInteger(h) && h >= 0 && h <= 23) ? h : 0;
+}
+
+// Os pares id_tipo/tipo_pagamento seguem o mesmo mapa canônico das demais origens de
+// api_pagamentos (1 Dinheiro, 3 Cartão Crédito, 4 Cartão Débito, 11 Refeição, 99 Outros).
+// O CSV só preenche TIPO OPERACAO nas vendas TEF; nas demais o meio de pagamento vem
+// apenas na descrição, por isso o fallback abaixo. Nunca retorna NULL.
 function map3lmPaymentType(tipoOperacao, descrPagto) {
     const desc = (descrPagto || '').toUpperCase().trim();
     const oper = (tipoOperacao || '').toUpperCase().trim();
@@ -68,23 +78,25 @@ function map3lmPaymentType(tipoOperacao, descrPagto) {
     }
 
     // 2. Fallback pela descrição
-    if (desc.includes('CRED') || desc.includes('AMEX')) {
-        return { id_tipo: 3, tipo_pagamento: 'Cartão Crédito' };
-    }
-    if (desc.includes('DEB') || desc.includes('DEBITO')) {
-        return { id_tipo: 4, tipo_pagamento: 'Cartão Débito' };
+    if (desc.includes('DINHEIRO') || desc.includes('MONEY')) {
+        return { id_tipo: 1, tipo_pagamento: 'Dinheiro' };
     }
     if (desc.includes('PIX')) {
         return { id_tipo: 99, tipo_pagamento: 'Outros' };
     }
-    if (desc.includes('DINHEIRO') || desc.includes('MONEY')) {
-        return { id_tipo: 1, tipo_pagamento: 'Dinheiro' };
-    }
-    if (desc.includes('ALELO') || desc.includes('SODEXO') || desc.includes('TICKET') || desc.includes('VOUCH') || desc.includes('VALE')) {
+    // Vale-refeição antes dos cartões: "VR ELETRO" é refeição, não débito.
+    if (desc.includes('ALELO') || desc.includes('SODEXO') || desc.includes('TICKET')
+        || desc.includes('VOUCH') || desc.includes('VALE') || /\bVR\b/.test(desc)) {
         return { id_tipo: 11, tipo_pagamento: 'Refeição' };
     }
+    if (desc.includes('CRED') || desc.includes('AMEX')) {
+        return { id_tipo: 3, tipo_pagamento: 'Cartão Crédito' };
+    }
+    if (desc.includes('DEB') || desc.includes('ELETRO') || desc.includes('ELECTRON')) {
+        return { id_tipo: 4, tipo_pagamento: 'Cartão Débito' };
+    }
 
-    // Fallback padrão
+    // Fallback padrão (IFOOD ONLINE, CONSUMO INTERNO, etc.)
     return { id_tipo: 99, tipo_pagamento: 'Outros' };
 }
 
@@ -154,6 +166,12 @@ async function run(importId) {
         });
 
         // 6. Faz o parse de dados das linhas do CSV
+        //
+        // Layout 3LM: 46 colunas separadas por ';'. O relatório é fiscal — traz nota, itens e
+        // pagamentos, e NÃO traz número de pessoas, taxa de serviço, status de cancelamento nem
+        // canal do pedido. Por isso, no INSERT de movimento_caixa, numPessoas (1 = uma nota por
+        // cliente), vlServicoRecebido (0.00), cancelado (0) e modoVenda/modoVenda2 ('SALAO', o
+        // canal em que estas lojas operam) são constantes, e não campos mapeados do arquivo.
         const orders = {};
         const produtosFaltantes = {};
         let isFirstLine = true;
@@ -274,10 +292,12 @@ async function run(importId) {
             const placeholders = datasArray.map(() => '?').join(',');
 
             log(`[3LM Import #${importId}]   -> Limpando em lote da tabela sales (${datasArray.length} datas)...`, '3lm_import');
+            // dtLancamento é datetime e carrega a hora da venda: comparar com a data pura não
+            // casaria nenhuma linha, e o INSERT seguinte colidiria com a PK idItemVenda.
             await conn.execute(`
-                DELETE FROM sales 
-                WHERE system_unit_id = ? 
-                  AND dtLancamento IN (${placeholders}) 
+                DELETE FROM sales
+                WHERE system_unit_id = ?
+                  AND DATE(dtLancamento) IN (${placeholders})
                   AND idItemVenda LIKE '3lm-%'
             `, [systemUnitId, ...datasArray]);
 
@@ -291,11 +311,22 @@ async function run(importId) {
 
             log(`[3LM Import #${importId}]   -> Limpando em lote da tabela api_pagamentos...`, '3lm_import');
             await conn.execute(`
-                DELETE FROM api_pagamentos 
-                WHERE id_loja = ? 
-                  AND data_contabil IN (${placeholders}) 
+                DELETE FROM api_pagamentos
+                WHERE id_loja = ?
+                  AND data_contabil IN (${placeholders})
                   AND id_operacao LIKE '3lm-%'
-            `, [customCode.toString(), ...datasArray]);
+            // api_pagamentos.id_loja é INT. Algumas unidades (ex.: Casa Iryna)
+            // usam UUID em custom_code, portanto aqui deve ser sempre o id interno.
+            `, [systemUnitId, ...datasArray]);
+
+            // consolidateSalesByUnit soma no que já existe (ON DUPLICATE KEY UPDATE valor = valor + novo),
+            // então sem limpar o período antes o BI dobra a cada reimportação da mesma data.
+            log(`[3LM Import #${importId}]   -> Limpando em lote da tabela _bi_sales...`, '3lm_import');
+            await conn.execute(`
+                DELETE FROM _bi_sales
+                WHERE system_unit_id = ?
+                  AND DATE(data_movimento) IN (${placeholders})
+            `, [systemUnitId, ...datasArray]);
         }
 
         let orderCount = 0;
@@ -328,7 +359,8 @@ async function run(importId) {
                 `, [
                     payUuid,
                     idOperacao,
-                    customCode.toString(),
+                    // api_pagamentos.id_loja é numérico; customCode pode ser UUID.
+                    systemUnitId,
                     unitName,
                     parseInt(notaFiscal),
                     payIndex,
@@ -407,10 +439,10 @@ async function run(importId) {
 
             await conn.execute(`
                 INSERT INTO movimento_caixa (
-                    id, num_controle, dataAbertura, dataContabil, 
+                    id, num_controle, dataAbertura, dataContabil,
                     lojaId, loja, vlTotalReceber, vlTotalRecebido, vlDesconto, rede,
-                    cancelado, numPessoas, modoVenda2
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '3LM PDV', 0, 1, 'BALCAO')
+                    cancelado, numPessoas, modoVenda, modoVenda2, hora, vlServicoRecebido
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '3LM PDV', 0, 1, 'SALAO', 'SALAO', ?, 0.00)
             `, [
                 idOperacao,
                 idOperacao,
@@ -420,7 +452,8 @@ async function run(importId) {
                 unitName,
                 somaBruto,
                 somaPagamentos,
-                somaDescontos
+                somaDescontos,
+                parseHoraToInt(order.hora_abert)
             ]);
         }
 
@@ -484,10 +517,12 @@ async function run(importId) {
         if (dataInicioFaturamento && dataFimFaturamento) {
             log(`[3LM Import #${importId}]   -> Sincronizando BI para o período de ${dataInicioFaturamento} a ${dataFimFaturamento}...`, '3lm_import');
             try {
+                // O filtro do BI é BETWEEN sobre dtLancamento (datetime): sem a hora, o último dia
+                // do período entraria como 00:00:00 e ficaria de fora da consolidação.
                 await callPHP('consolidateSalesByUnit', {
                     system_unit_id: systemUnitId,
-                    dt_inicio: dataInicioFaturamento,
-                    dt_fim: dataFimFaturamento
+                    dt_inicio: `${dataInicioFaturamento} 00:00:00`,
+                    dt_fim: `${dataFimFaturamento} 23:59:59`
                 });
             } catch (errBi) {
                 log(`[3LM Import #${importId}] ⚠️ Falha na consolidação do BI: ${errBi.message}`, '3lm_import');
@@ -505,10 +540,8 @@ async function run(importId) {
             WHERE id = ?
         `, [totalVendasCalculado, totalNotasImportadas, dataInicioFaturamento, dataFimFaturamento, importId]);
 
-        // Remove arquivo físico
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-        }
+        // O CSV é mantido em disco: a ação "reprocessar" do portal reenvia o mesmo import_id e
+        // o job relê o arquivo. Ele só é removido na exclusão da importação (runExclusao).
 
         log(`[3LM Import #${importId}] 🔔 Gerando notificação no painel do usuário...`, '3lm_import');
 
@@ -551,11 +584,8 @@ async function run(importId) {
                     const errorFile = rows[0].nome_arquivo;
 
                     await conn.execute("UPDATE 3lm_imports SET status = 'erro', mensagem_erro = ? WHERE id = ?", [error.message, errorImportId]);
-                    
-                    const errorFilePath = path.join(UPLOAD_3LM_DIR, `import_${errorImportId}.csv`);
-                    if (fs.existsSync(errorFilePath)) {
-                        fs.unlinkSync(errorFilePath);
-                    }
+
+                    // O CSV é preservado também no erro, para permitir o reprocessamento.
 
                     if (errorUser) {
                         const [[maxIdRow]] = await conn.execute("SELECT COALESCE(MAX(id), 0) + 1 AS nextId FROM system_notification");
@@ -645,7 +675,7 @@ async function runExclusao(importId, systemUnitId) {
                 WHERE id_loja = ? 
                   AND data_contabil BETWEEN ? AND ? 
                   AND origem = '3LM'
-            `, [customCode.toString(), formattedDataInicio, formattedDataFim]);
+            `, [systemUnitId, formattedDataInicio, formattedDataFim]);
 
             // 2.2. Deleta da movimento_caixa
             log(`[3LM Exclusão #${importId}]   -> Removendo registros da movimento_caixa...`, '3lm_import');
@@ -759,7 +789,13 @@ async function runExclusao(importId, systemUnitId) {
     }
 }
 
-module.exports = { 
+module.exports = {
     run3lmImportById: run,
-    run3lmExclusaoById: runExclusao
+    run3lmExclusaoById: runExclusao,
+    // Expostas para conferência do parsing do CSV sem tocar no banco.
+    map3lmPaymentType,
+    parseHoraToInt,
+    parseBRL,
+    formatToISODate,
+    cleanCsvField
 };
