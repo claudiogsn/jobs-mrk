@@ -161,14 +161,28 @@ async function sendWhatsappText(telefone, mensagem) {
 async function sendWhatsappPdf(telefone, url) {
     const fileName = url.split('/').pop();
     try {
-        await axios.post(
+        const response = await axios.post(
             `${process.env.ZAPI_BASE_URL}/instances/${process.env.ZAPI_INSTANCE_ID}/token/${process.env.ZAPI_INSTANCE_TOKEN}/send-document/pdf`,
             { phone: telefone, document: url, fileName },
             { headers: { 'Content-Type': 'application/json', 'Client-Token': process.env.ZAPI_CLIENT_TOKEN } }
         );
-        log(`📎 PDF ${fileName} enviado para ${telefone}`, 'sendWhatsappPdf');
+        const responseBody = JSON.stringify(response.data ?? null);
+        const responseSummary = responseBody.length > 1000
+            ? `${responseBody.slice(0, 1000)}... [truncated]`
+            : responseBody;
+        log(
+            `📎 PDF ${fileName} aceito pela Z-API para ${telefone} ` +
+            `(status ${response.status}, resposta: ${responseSummary})`,
+            'sendWhatsappPdf'
+        );
     } catch (err) {
-        log(`❌ Erro ao enviar PDF: ${err.message}`, 'sendWhatsappPdf');
+        const errorBody = err.response?.data
+            ? JSON.stringify(err.response.data)
+            : err.message;
+        log(
+            `❌ Erro ao enviar PDF ${fileName}: HTTP ${err.response?.status || 'sem resposta'} - ${errorBody}`,
+            'sendWhatsappPdf'
+        );
     }
 }
 
