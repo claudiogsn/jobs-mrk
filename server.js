@@ -44,7 +44,10 @@ const {DateTime} = require("luxon");
 const app = express();
 const router = express.Router();
 const PORT = process.env.PORT || 3005;
-const REPORTS_DIR = path.join(__dirname, 'workers', 'reports');
+// Novos relatórios são criados fora de `workers`, que é observado pelo PM2.
+const REPORTS_DIR = path.join(__dirname, 'reports');
+// Mantém acessíveis os comprovantes criados antes da alteração de diretório.
+const LEGACY_REPORTS_DIR = path.join(__dirname, 'workers', 'reports');
 
 app.use(express.json());
 // Contexto de requisição: requestId/correlationId + trace/span + log de entrada/saída.
@@ -70,6 +73,7 @@ router.get('/logo.png', (req, res) => {
 });
 
 router.use('/reports', express.static(REPORTS_DIR));
+router.use('/reports', express.static(LEGACY_REPORTS_DIR));
 
 
 // === API Explorer Dinâmico ===

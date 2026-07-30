@@ -9,7 +9,9 @@ const { log } = require('../utils/logger');
 
 // ================== CONFIG ==================
 
-const REPORTS_DIR = path.join(__dirname, 'reports');
+// Não grave relatórios dentro de `workers`: essa pasta é observada pelo PM2 e
+// a criação do PDF faria a API reiniciar durante o envio ao WhatsApp.
+const REPORTS_DIR = path.join(__dirname, '..', 'reports');
 const PUBLIC_BASE_REPORT_URL = process.env.PUBLIC_BASE_REPORT_URL;
 
 const fonts = {

@@ -19,7 +19,7 @@ const common = {
     watch: ["server.js", "processes", "workers", "views", "utils"],
     // Os PDFs de transferência são gerados em workers/reports. Sem esta exclusão,
     // cada comprovante criado dispara o watch e reinicia a API no meio do envio.
-    ignore_watch: ["node_modules", "logs", ".git", "workers/reports"],
+    ignore_watch: ["node_modules", "logs", ".git", "workers/reports", "reports"],
     env: {
         NODE_ENV: process.env.NODE_ENV || 'production',
     },
