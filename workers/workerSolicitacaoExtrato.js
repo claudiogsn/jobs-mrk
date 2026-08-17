@@ -34,18 +34,29 @@ async function verificarLimiteDiarioConta(conn, accountId) {
 // ==========================================
 // WORKER 1: SOLICITAÇÃO DE EXTRATOS
 // ==========================================
-async function ExecuteJobSolicitacao({ system_unit_id, dt_inicio, dt_fim, user_id } = {}) {
+async function ExecuteJobSolicitacao({ system_unit_id, account_id, dt_inicio, dt_fim, user_id } = {}) {
     const isManual = !!system_unit_id || !!dt_inicio;
     const eventType = isManual ? 'manual' : 'automatic';
 
-    // Calcula o dia de ontem no formato YYYY-MM-DD
+    // Por padrão na rotina automática, olha os últimos 7 dias até ontem para cobrir eventuais atrasos do banco
     const ontem = DateTime.now().minus({ days: 1 }).toISODate();
+    const seteDiasAtras = DateTime.now().minus({ days: 7 }).toISODate();
 
-    // Se receber datas por parâmetro (manual), usa elas. Senão (automático), usa "ontem".
-    const dataStart = dt_inicio || ontem;
-    const dataEnd = dt_fim || ontem;
+    let dataStart = dt_inicio || seteDiasAtras;
+    let dataEnd = dt_fim || ontem;
 
-    log(`🚀 Iniciando Solicitação de Extratos | Período: ${dataStart} a ${dataEnd}`, 'workerSolicitacao');
+    // Validação de intervalo máximo de 30 dias
+    if (isManual && dt_inicio && dt_fim) {
+        const d1 = DateTime.fromISO(dt_inicio);
+        const d2 = DateTime.fromISO(dt_fim);
+        const diffDays = Math.abs(d2.diff(d1, 'days').days);
+        if (diffDays > 30) {
+            log(`⚠️ Intervalo solicitado de ${diffDays} dias excede o limite máximo de 30 dias. Ajustando para 30 dias retroativos.`, 'workerSolicitacao');
+            dataStart = d2.minus({ days: 30 }).toISODate();
+        }
+    }
+
+    log(`🚀 Iniciando Solicitação de Extratos | Período: ${dataStart} a ${dataEnd} | Modo: ${eventType}`, 'workerSolicitacao');
 
     const dbConfig = {
         host: process.env.DB_HOST, user: process.env.DB_USER, password: process.env.DB_PASS,
@@ -73,10 +84,17 @@ async function ExecuteJobSolicitacao({ system_unit_id, dt_inicio, dt_fim, user_i
                 'Content-Type': 'application/json'
             };
 
-            const [accounts] = await conn.execute(`
+            let sqlAccounts = `
                 SELECT id, account_hash FROM pluggy_accounts
                 WHERE system_unit_id = ? AND payer_id = ? AND active = 1 AND statement_actived = 1
-            `, [payer.system_unit_id, payer.id]);
+            `;
+            const paramsAccounts = [payer.system_unit_id, payer.id];
+            if (account_id) {
+                sqlAccounts += ` AND id = ?`;
+                paramsAccounts.push(account_id);
+            }
+
+            const [accounts] = await conn.execute(sqlAccounts, paramsAccounts);
 
             let sucessoGeral = true;
             let protocolosGerados = 0;

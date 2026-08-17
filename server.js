@@ -122,7 +122,7 @@ router.post('/api/extratos/sincronizar', async (req, res) => {
     logger.debug('Sincronização de extratos: body recebido', { body: req.body });
     try {
 
-        const { system_unit_id, dt_inicio, dt_fim, user_id } = req.body;
+        const { system_unit_id, account_id, dt_inicio, dt_fim, user_id } = req.body;
 
         if (!system_unit_id) {
             return res.status(400).json({
@@ -131,9 +131,9 @@ router.post('/api/extratos/sincronizar', async (req, res) => {
             });
         }
 
-
         const payloadWorker = {
             system_unit_id: Number(system_unit_id),
+            account_id: account_id ? Number(account_id) : undefined,
             dt_inicio: dt_inicio,
             dt_fim: dt_fim,
             user_id: user_id

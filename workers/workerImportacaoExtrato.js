@@ -41,9 +41,15 @@ async function salvarTransacoes(conn, transactions, systemUnitId, accountId) {
 
     if (rows.length > 0) {
         const sql = `
-            INSERT IGNORE INTO pluggy_transactions (
+            INSERT INTO pluggy_transactions (
                 system_unit_id, account_id, pluggy_transaction_id, type, description, amount, date, raw_data
             ) VALUES ?
+            ON DUPLICATE KEY UPDATE
+                type = VALUES(type),
+                description = VALUES(description),
+                amount = VALUES(amount),
+                date = VALUES(date),
+                raw_data = VALUES(raw_data)
         `;
 
         for (const chunk of chunkArray(rows, CHUNK_SIZE)) {
