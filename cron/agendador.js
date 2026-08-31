@@ -22,6 +22,10 @@ const jobMap = {
     ExecuteJobImportacao: require('../workers/workerImportacaoExtrato').ExecuteJobImportacao,
     ExecuteJobIfoodSync: require('../workers/workerIfoodSync').ExecuteJobIfoodSync,
     ExecuteJob3lmEstoque: require('../workers/worker3lmEstoque').ExecuteJob3lmEstoque,
+    ExecuteJobTakeatSync: async () => {
+        const ontem = require('luxon').DateTime.now().setZone('America/Sao_Paulo').minus({ days: 1 }).toISODate();
+        return require('../workers/workerTakeatSync').ProcessJobTakeatAll(ontem, ontem);
+    },
 
     // 🔧 Job de teste
     jobTesteLog: async () => {

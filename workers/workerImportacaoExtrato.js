@@ -19,13 +19,16 @@ async function salvarTransacoes(conn, transactions, systemUnitId, accountId) {
     if (!transactions || transactions.length === 0) return 0;
 
     const rows = [];
+    const seenTxIds = new Set();
+
     for (const tx of transactions) {
         // CORREÇÃO AQUI: Pegando os nomes exatos que vêm no JSON da Tecnospeed
         const transactionId = tx.transactionId;
         const tipoTransacao = tx.transactionType || tx.type || 'credit';
 
-        // Se por algum motivo a API não mandar o ID, a gente pula para não quebrar o UNIQUE
-        if (!transactionId) continue;
+        // Se por algum motivo a API não mandar o ID ou já estiver duplicado no lote, pula
+        if (!transactionId || seenTxIds.has(transactionId)) continue;
+        seenTxIds.add(transactionId);
 
         rows.push([
             systemUnitId,
@@ -113,9 +116,11 @@ async function ExecuteJobImportacao() {
                 const statusApi = response.data.statement?.status || 'ERROR';
 
                 if (statusApi === 'SUCCESS') {
-                    const creditos = (response.data.transaction?.credit || []).map(t => ({ ...t, type: 'credit' }));
-                    const debitos = (response.data.transaction?.debit || []).map(t => ({ ...t, type: 'debit' }));
-                    const transacoes = [...creditos, ...debitos];
+                    const creditos    = (response.data.transaction?.credit || []).map(t => ({ ...t, type: t.transactionType || 'credit' }));
+                    const debitos     = (response.data.transaction?.debit || []).map(t => ({ ...t, type: t.transactionType || 'debit' }));
+                    const creditosDup = (response.data.transactionDuplicated?.credit || []).map(t => ({ ...t, type: t.transactionType || 'credit' }));
+                    const debitosDup  = (response.data.transactionDuplicated?.debit || []).map(t => ({ ...t, type: t.transactionType || 'debit' }));
+                    const transacoes  = [...creditos, ...debitos, ...creditosDup, ...debitosDup];
 
                     const savedQtd = await salvarTransacoes(conn, transacoes, importTask.system_unit_id, importTask.account_id);
 
