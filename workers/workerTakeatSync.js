@@ -192,7 +192,8 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
 
         let chunkSessions = [];
         let attempts = 0;
-        while (attempts < 3) {
+        const maxAttempts = 5;
+        while (attempts < maxAttempts) {
             attempts++;
             try {
                 const resp = await axios.get(`${TAKEAT_BASE_URL}/table-sessions`, {
@@ -206,9 +207,11 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
                 chunkSessions = resp.data || [];
                 break;
             } catch (apiErr) {
-                if (apiErr.response?.status === 429 && attempts < 3) {
-                    const retrySec = 13;
-                    log(`⏳ [Takeat #${systemUnitId}] Rate limit atingido (429). Aguardando ${retrySec}s para tentar novamente...`, 'takeat');
+                if (apiErr.response?.status === 429 && attempts < maxAttempts) {
+                    const errMsg = apiErr.response?.data?.message || apiErr.message || '';
+                    const match = errMsg.match(/(\d+)\s*segund/i);
+                    const retrySec = match ? (parseInt(match[1], 10) + 2) : (parseInt(apiErr.response?.headers?.['retry-after'], 10) || 35);
+                    log(`⏳ [Takeat #${systemUnitId}] Rate limit atingido (429). Aguardando ${retrySec}s conforme instrução da Takeat antes da tentativa ${attempts + 1}/${maxAttempts}...`, 'takeat');
                     await new Promise(resolve => setTimeout(resolve, retrySec * 1000));
                     continue;
                 }
@@ -221,6 +224,11 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
         }
 
         allSessions = allSessions.concat(chunkSessions);
+
+        // Pequena pausa preventiva entre blocos para não saturar o rate limit
+        if (chunks.length > 1) {
+            await new Promise(resolve => setTimeout(resolve, 800));
+        }
     }
 
     // Remove duplicatas de sessões pelo ID
