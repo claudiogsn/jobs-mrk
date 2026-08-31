@@ -44,6 +44,44 @@ function normalizePaymentMethod(pm) {
 }
 
 /**
+ * Insere registros em lote (bulk insert) para ganho de performance
+ */
+async function batchInsert(conn, table, columns, rows, batchSize = 100) {
+    if (!rows || rows.length === 0) return;
+    for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize);
+        const sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES ?`;
+        await conn.query(sql, [batch]);
+    }
+}
+
+/**
+ * Upsert em lote para _bi_sales
+ */
+async function batchUpsertBiSales(conn, rows, batchSize = 100) {
+    if (!rows || rows.length === 0) return;
+    const columns = [
+        'data_movimento', 'cod_material', 'quantidade', 'valor_bruto',
+        'valor_unitario', 'valor_unitario_liquido', 'valor_liquido',
+        'custom_code', 'system_unit_id'
+    ];
+    for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize);
+        const sql = `
+            INSERT INTO _bi_sales (${columns.join(', ')})
+            VALUES ?
+            ON DUPLICATE KEY UPDATE
+                quantidade = VALUES(quantidade),
+                valor_bruto = VALUES(valor_bruto),
+                valor_unitario = VALUES(valor_unitario),
+                valor_unitario_liquido = VALUES(valor_unitario_liquido),
+                valor_liquido = VALUES(valor_liquido)
+        `;
+        await conn.query(sql, [batch]);
+    }
+}
+
+/**
  * Varre todas as unidades em unit_integracoes com provider = 'takeat' e ativo = 1
  */
 async function ProcessJobTakeatAll(dataInicio, dataFim) {
@@ -123,55 +161,78 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
 
     log(`📦 [Takeat #${systemUnitId}] Mapa carregado: ${mapaProdutos.size} chaves de produtos/PDV.`, 'takeat');
 
-    // 2. Monta intervalo em UTC a partir do fuso America/Sao_Paulo
-    const startDt = DateTime.fromISO(dataInicio, { zone: 'America/Sao_Paulo' }).startOf('day').toUTC().toISO();
-    const endDt = DateTime.fromISO(dataFim, { zone: 'America/Sao_Paulo' }).endOf('day').toUTC().toISO();
+    // 2. Quebra o período em blocos de até 2 dias para respeitar o limite máximo da API Takeat (máx 3 dias por chamada)
+    let curStart = DateTime.fromISO(dataInicio, { zone: 'America/Sao_Paulo' }).startOf('day');
+    const finalEnd = DateTime.fromISO(dataFim, { zone: 'America/Sao_Paulo' }).endOf('day');
 
-    const params = {
-        start_date: startDt,
-        end_date: endDt
-    };
-    if (restaurantId) {
-        params.restaurant_id = restaurantId;
+    const chunks = [];
+    while (curStart < finalEnd) {
+        let curEnd = curStart.plus({ days: 2 }).endOf('day');
+        if (curEnd > finalEnd) {
+            curEnd = finalEnd;
+        }
+        chunks.push({
+            startDt: curStart.toUTC().toISO(),
+            endDt: curEnd.toUTC().toISO()
+        });
+        curStart = curStart.plus({ days: 3 }).startOf('day');
     }
 
-    log(`🌐 [Takeat #${systemUnitId}] Consultando table-sessions (${startDt} a ${endDt})...`, 'takeat');
+    log(`🌐 [Takeat #${systemUnitId}] Consultando table-sessions em ${chunks.length} bloco(s) de data...`, 'takeat');
 
-    let sessions = [];
-    try {
-        const resp = await axios.get(`${TAKEAT_BASE_URL}/table-sessions`, {
-            params,
-            headers: {
-                Authorization: `Bearer ${token}`,
-                Accept: 'application/json'
-            },
-            timeout: 45000
-        });
-        sessions = resp.data || [];
-    } catch (apiErr) {
-        // Fallback para public-api se webhook falhar
-        if (TAKEAT_BASE_URL.includes('webhook.takeat.app')) {
+    let allSessions = [];
+    for (const chunk of chunks) {
+        const params = {
+            start_date: chunk.startDt,
+            end_date: chunk.endDt
+        };
+        if (restaurantId) {
+            params.restaurant_id = restaurantId;
+        }
+
+        let chunkSessions = [];
+        let attempts = 0;
+        while (attempts < 3) {
+            attempts++;
             try {
-                const fallbackUrl = 'https://public-api.takeat.app/v1';
-                const resp = await axios.get(`${fallbackUrl}/table-sessions`, {
+                const resp = await axios.get(`${TAKEAT_BASE_URL}/table-sessions`, {
                     params,
-                    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: 'application/json'
+                    },
                     timeout: 45000
                 });
-                sessions = resp.data || [];
-            } catch (e2) {
+                chunkSessions = resp.data || [];
+                break;
+            } catch (apiErr) {
+                if (apiErr.response?.status === 429 && attempts < 3) {
+                    const retrySec = 13;
+                    log(`⏳ [Takeat #${systemUnitId}] Rate limit atingido (429). Aguardando ${retrySec}s para tentar novamente...`, 'takeat');
+                    await new Promise(resolve => setTimeout(resolve, retrySec * 1000));
+                    continue;
+                }
                 throw new Error(`Erro na API Takeat: ${apiErr.response?.data?.message || apiErr.message}`);
             }
-        } else {
-            throw new Error(`Erro na API Takeat: ${apiErr.response?.data?.message || apiErr.message}`);
         }
+
+        if (!Array.isArray(chunkSessions)) {
+            chunkSessions = chunkSessions.data || [];
+        }
+
+        allSessions = allSessions.concat(chunkSessions);
     }
 
-    if (!Array.isArray(sessions)) {
-        sessions = sessions.data || [];
-    }
+    // Remove duplicatas de sessões pelo ID
+    const sessionMap = new Map();
+    allSessions.forEach(s => {
+        if (s && s.id) {
+            sessionMap.set(s.id, s);
+        }
+    });
+    const sessions = Array.from(sessionMap.values());
 
-    log(`📥 [Takeat #${systemUnitId}] ${sessions.length} comandas/sessões retornadas.`, 'takeat');
+    log(`📥 [Takeat #${systemUnitId}] Total consolidado: ${sessions.length} comandas/sessões retornadas.`, 'takeat');
 
     // 3. Inicia transação no MySQL
     await conn.beginTransaction();
@@ -203,6 +264,10 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
         let totalFaturado = 0;
         const biSalesAgrupados = new Map(); // key: "dataContabil_codMaterial"
 
+        const rowsMovCaixa = [];
+        const rowsPagamentos = [];
+        const rowsSales = [];
+
         for (const session of sessions) {
             // Considera sessões fechadas ou concluídas
             const isCompleted = session.status === 'completed' || session.status === 'closed' || session.completed_at || session.end_time;
@@ -231,14 +296,8 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
                 ? DateTime.fromISO(completedIso, { zone: 'utc' }).setZone('America/Sao_Paulo').toFormat('yyyy-MM-dd HH:mm:ss')
                 : `${dataContabil} 23:59:59`;
 
-            // A) Grava movimento_caixa
-            await conn.execute(`
-                INSERT INTO movimento_caixa (
-                    id, num_controle, dataAbertura, dataFechamento, dataContabil,
-                    lojaId, loja, rede, vlTotalReceber, vlTotalRecebido, vlDesconto,
-                    vlServicoRecebido, numPessoas, modoVenda, modoVenda2, hora, cancelado
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Takeat PDV', ?, ?, ?, ?, ?, ?, ?, ?, 0)
-            `, [
+            // A) Linha movimento_caixa
+            rowsMovCaixa.push([
                 `takeat-session-${sessionId}`,
                 `takeat-session-${sessionId}`,
                 dtAberturaStr,
@@ -246,6 +305,7 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
                 dataContabil,
                 String(systemUnitId),
                 unitName,
+                'Takeat PDV',
                 vlBruto,
                 vlLiquido,
                 vlDesconto,
@@ -253,12 +313,13 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
                 numPessoas,
                 modoVenda,
                 modoVenda,
-                horaInteira
+                horaInteira,
+                0
             ]);
 
             totalFaturado += vlLiquido;
 
-            // B) Grava api_pagamentos
+            // B) Linhas api_pagamentos
             const payments = Array.isArray(session.payments) ? session.payments : [];
             let paySeq = 0;
 
@@ -277,15 +338,7 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
                     ? DateTime.fromISO(pay.predicted_received_date, { zone: 'utc' }).setZone('America/Sao_Paulo').toISODate()
                     : dataContabil;
 
-                await conn.execute(`
-                    INSERT INTO api_pagamentos (
-                        uuid, id_operacao, id_loja, nome_loja, num_pedido, seq_pedido,
-                        data_contabil, status_pagamento, data_lancamento, hora_lancamento,
-                        id_m, descricao, data_vencimento, valor, valor_liquido,
-                        taxa_comissao, valor_comissao, nsu, adquirente, autorizacao,
-                        id_tipo, tipo_pagamento, bandeira, origem
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'TAKEAT')
-                `, [
+                rowsPagamentos.push([
                     payUuid,
                     `takeat-${systemUnitId}-${sessionId}`,
                     systemUnitId,
@@ -297,7 +350,7 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
                     dataContabil,
                     horaLancamento,
                     parseInt(pm.id || pay.id || 0, 10),
-                    pm.name || norm.tipo_pagamento,
+                    (pm.name || norm.tipo_pagamento || '').slice(0, 100),
                     dtVencimento,
                     vlrFaturado,
                     vlrLiquidoAdquirente,
@@ -308,11 +361,12 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
                     pay.authorization_code || null,
                     norm.id_tipo,
                     norm.tipo_pagamento,
-                    norm.bandeira
+                    norm.bandeira,
+                    'TAKEAT'
                 ]);
             }
 
-            // C) Processa itens vendidos (bills -> order_baskets -> orders -> order_complements)
+            // C) Linhas sales (bills -> order_baskets -> orders -> order_complements)
             const bills = Array.isArray(session.bills) ? session.bills : [];
             for (const bill of bills) {
                 const baskets = Array.isArray(bill.order_baskets) ? bill.order_baskets : [];
@@ -332,13 +386,7 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
                         const vTotal = parseFloat(order.total_price || (vUnit * qtd));
 
                         if (codMaterial) {
-                            await conn.execute(`
-                                INSERT INTO sales (
-                                    idItemVenda, dtLancamento, codMaterial, descricao, quantidade,
-                                    valorUnitario, valorUnitarioLiquido, valorLiquido, valorBruto,
-                                    modoVenda, system_unit_id, custom_code
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            `, [
+                            rowsSales.push([
                                 `takeat-${order.id}`,
                                 dtFechamentoStr,
                                 codMaterial,
@@ -387,18 +435,16 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
                                 const qtdComp = (parseFloat(comp.amount) || 1) * qtd;
 
                                 if (codMaterialComp) {
-                                    await conn.execute(`
-                                        INSERT INTO sales (
-                                            idItemVenda, dtLancamento, codMaterial, descricao, quantidade,
-                                            valorUnitario, valorUnitarioLiquido, valorLiquido, valorBruto,
-                                            modoVenda, system_unit_id, custom_code
-                                        ) VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, ?, ?, ?)
-                                    `, [
+                                    rowsSales.push([
                                         `takeat-comp-${comp.id}`,
                                         dtFechamentoStr,
                                         codMaterialComp,
                                         takeatCompNome.slice(0, 250),
                                         qtdComp,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
                                         modoVenda,
                                         systemUnitId,
                                         String(systemUnitId)
@@ -428,22 +474,31 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
             }
         }
 
+        // Executa gravações em lote ultra-rápidas
+        await batchInsert(conn, 'movimento_caixa', [
+            'id', 'num_controle', 'dataAbertura', 'dataFechamento', 'dataContabil',
+            'lojaId', 'loja', 'rede', 'vlTotalReceber', 'vlTotalRecebido', 'vlDesconto',
+            'vlServicoRecebido', 'numPessoas', 'modoVenda', 'modoVenda2', 'hora', 'cancelado'
+        ], rowsMovCaixa);
+
+        await batchInsert(conn, 'api_pagamentos', [
+            'uuid', 'id_operacao', 'id_loja', 'nome_loja', 'num_pedido', 'seq_pedido',
+            'data_contabil', 'status_pagamento', 'data_lancamento', 'hora_lancamento',
+            'id_m', 'descricao', 'data_vencimento', 'valor', 'valor_liquido',
+            'taxa_comissao', 'valor_comissao', 'nsu', 'adquirente', 'autorizacao',
+            'id_tipo', 'tipo_pagamento', 'bandeira', 'origem'
+        ], rowsPagamentos);
+
+        await batchInsert(conn, 'sales', [
+            'idItemVenda', 'dtLancamento', 'codMaterial', 'descricao', 'quantidade',
+            'valorUnitario', 'valorUnitarioLiquido', 'valorLiquido', 'valorBruto',
+            'modoVenda', 'system_unit_id', 'custom_code'
+        ], rowsSales);
+
         // D) Grava em lote na tabela _bi_sales (Consolidado)
-        for (const bi of biSalesAgrupados.values()) {
+        const rowsBi = Array.from(biSalesAgrupados.values()).map(bi => {
             const vUnit = bi.quantidade > 0 ? (bi.valor_liquido / bi.quantidade) : 0;
-            await conn.execute(`
-                INSERT INTO _bi_sales (
-                    data_movimento, cod_material, quantidade, valor_bruto,
-                    valor_unitario, valor_unitario_liquido, valor_liquido,
-                    custom_code, system_unit_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                    quantidade = VALUES(quantidade),
-                    valor_bruto = VALUES(valor_bruto),
-                    valor_unitario = VALUES(valor_unitario),
-                    valor_unitario_liquido = VALUES(valor_unitario_liquido),
-                    valor_liquido = VALUES(valor_liquido)
-            `, [
+            return [
                 bi.data_movimento,
                 bi.cod_material,
                 bi.quantidade,
@@ -453,8 +508,10 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
                 parseFloat(bi.valor_liquido.toFixed(2)),
                 bi.custom_code,
                 bi.system_unit_id
-            ]);
-        }
+            ];
+        });
+
+        await batchUpsertBiSales(conn, rowsBi);
 
         // Atualiza status e timestamp da sincronização em unit_integracoes
         await conn.execute(`
