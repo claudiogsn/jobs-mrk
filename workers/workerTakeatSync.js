@@ -224,30 +224,36 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
             const vlServico = Math.max(0, parseFloat(session.total_service_price || vlLiquido) - vlLiquido);
             const numPessoas = Math.max(1, parseInt(session.people_at_table || 1, 10));
 
+            const dtAberturaStr = session.start_time
+                ? DateTime.fromISO(session.start_time, { zone: 'utc' }).setZone('America/Sao_Paulo').toFormat('yyyy-MM-dd HH:mm:ss')
+                : `${dataContabil} 00:00:00`;
+            const dtFechamentoStr = completedIso
+                ? DateTime.fromISO(completedIso, { zone: 'utc' }).setZone('America/Sao_Paulo').toFormat('yyyy-MM-dd HH:mm:ss')
+                : `${dataContabil} 23:59:59`;
+
             // A) Grava movimento_caixa
             await conn.execute(`
                 INSERT INTO movimento_caixa (
-                    lojaId, loja, num_controle, dataContabil, dtAbertura, dtFechamento, hora,
-                    modoVenda, modoVenda2, vlBruto, vlLiquido, vlDesconto, vlServicoRecebido,
-                    vlTotalReceber, vlTotalRecebido, numPessoas, cancelado
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                    id, num_controle, dataAbertura, dataFechamento, dataContabil,
+                    lojaId, loja, rede, vlTotalReceber, vlTotalRecebido, vlDesconto,
+                    vlServicoRecebido, numPessoas, modoVenda, modoVenda2, hora, cancelado
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Takeat PDV', ?, ?, ?, ?, ?, ?, ?, ?, 0)
             `, [
+                `takeat-session-${sessionId}`,
+                `takeat-session-${sessionId}`,
+                dtAberturaStr,
+                dtFechamentoStr,
+                dataContabil,
                 String(systemUnitId),
                 unitName,
-                `takeat-session-${sessionId}`,
-                dataContabil,
-                session.start_time || completedIso,
-                completedIso,
-                horaInteira,
-                modoVenda,
-                modoVenda,
                 vlBruto,
                 vlLiquido,
                 vlDesconto,
                 vlServico,
-                vlBruto,
-                vlLiquido,
-                numPessoas
+                numPessoas,
+                modoVenda,
+                modoVenda,
+                horaInteira
             ]);
 
             totalFaturado += vlLiquido;
@@ -328,16 +334,21 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
                         if (codMaterial) {
                             await conn.execute(`
                                 INSERT INTO sales (
-                                    idItemVenda, dtLancamento, cod_material, quantidade,
-                                    valor_unitario, valor_total, system_unit_id, custom_code
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                    idItemVenda, dtLancamento, codMaterial, descricao, quantidade,
+                                    valorUnitario, valorUnitarioLiquido, valorLiquido, valorBruto,
+                                    modoVenda, system_unit_id, custom_code
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             `, [
                                 `takeat-${order.id}`,
-                                completedIso,
+                                dtFechamentoStr,
                                 codMaterial,
+                                takeatProdNome.slice(0, 250),
                                 qtd,
                                 vUnit,
+                                vUnit,
                                 vTotal,
+                                vTotal,
+                                modoVenda,
                                 systemUnitId,
                                 String(systemUnitId)
                             ]);
@@ -378,14 +389,17 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
                                 if (codMaterialComp) {
                                     await conn.execute(`
                                         INSERT INTO sales (
-                                            idItemVenda, dtLancamento, cod_material, quantidade,
-                                            valor_unitario, valor_total, system_unit_id, custom_code
-                                        ) VALUES (?, ?, ?, ?, 0, 0, ?, ?)
+                                            idItemVenda, dtLancamento, codMaterial, descricao, quantidade,
+                                            valorUnitario, valorUnitarioLiquido, valorLiquido, valorBruto,
+                                            modoVenda, system_unit_id, custom_code
+                                        ) VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, ?, ?, ?)
                                     `, [
                                         `takeat-comp-${comp.id}`,
-                                        completedIso,
+                                        dtFechamentoStr,
                                         codMaterialComp,
+                                        takeatCompNome.slice(0, 250),
                                         qtdComp,
+                                        modoVenda,
                                         systemUnitId,
                                         String(systemUnitId)
                                     ]);
