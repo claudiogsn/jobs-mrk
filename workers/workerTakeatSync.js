@@ -44,13 +44,21 @@ function normalizePaymentMethod(pm) {
 }
 
 /**
- * Insere registros em lote (bulk insert) para ganho de performance
+ * Insere registros em lote (bulk insert) com ON DUPLICATE KEY UPDATE para tolerância a falhas e idempotência
  */
 async function batchInsert(conn, table, columns, rows, batchSize = 100) {
     if (!rows || rows.length === 0) return;
+    const updateClauses = columns
+        .filter(c => c !== 'id' && c !== 'uuid' && c !== 'idItemVenda')
+        .map(c => `\`${c}\` = VALUES(\`${c}\`)`)
+        .join(', ');
+
+    const sql = updateClauses.length > 0
+        ? `INSERT INTO ${table} (${columns.map(c => `\`${c}\``).join(', ')}) VALUES ? ON DUPLICATE KEY UPDATE ${updateClauses}`
+        : `INSERT IGNORE INTO ${table} (${columns.map(c => `\`${c}\``).join(', ')}) VALUES ?`;
+
     for (let i = 0; i < rows.length; i += batchSize) {
         const batch = rows.slice(i, i + batchSize);
-        const sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES ?`;
         await conn.query(sql, [batch]);
     }
 }
@@ -256,10 +264,9 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
 
         await conn.execute(`
             DELETE FROM movimento_caixa
-            WHERE lojaId = ?
+            WHERE (lojaId = ? OR id LIKE ?)
               AND dataContabil >= ? AND dataContabil <= ?
-              AND num_controle LIKE 'takeat-%'
-        `, [String(systemUnitId), dataInicio, dataFim]);
+        `, [String(systemUnitId), `takeat-${systemUnitId}-%`, dataInicio, dataFim]);
 
         await conn.execute(`
             DELETE FROM api_pagamentos
@@ -306,8 +313,8 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
 
             // A) Linha movimento_caixa
             rowsMovCaixa.push([
-                `takeat-session-${sessionId}`,
-                `takeat-session-${sessionId}`,
+                `takeat-${systemUnitId}-session-${sessionId}`,
+                `takeat-${systemUnitId}-session-${sessionId}`,
                 dtAberturaStr,
                 dtFechamentoStr,
                 dataContabil,
@@ -395,7 +402,7 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
 
                         if (codMaterial) {
                             rowsSales.push([
-                                `takeat-${order.id}`,
+                                `takeat-${systemUnitId}-order-${order.id}`,
                                 dtFechamentoStr,
                                 codMaterial,
                                 takeatProdNome.slice(0, 250),
@@ -444,7 +451,7 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
 
                                 if (codMaterialComp) {
                                     rowsSales.push([
-                                        `takeat-comp-${comp.id}`,
+                                        `takeat-${systemUnitId}-comp-${comp.id}`,
                                         dtFechamentoStr,
                                         codMaterialComp,
                                         takeatCompNome.slice(0, 250),
@@ -457,6 +464,7 @@ async function ProcessStoreTakeat(conn, systemUnitId, dataInicio, dataFim, unitN
                                         systemUnitId,
                                         String(systemUnitId)
                                     ]);
+                                    totalItensVendidos += qtdComp;
 
                                     const biCompKey = `${dataContabil}_${codMaterialComp}`;
                                     if (!biSalesAgrupados.has(biCompKey)) {
