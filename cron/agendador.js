@@ -16,6 +16,7 @@ const jobMap = {
     WorkerReportPdfMonthly: require('../workers/WorkerReportPdfMonthly').WorkerReportPdfMonthly,
     WorkerNotasPendentes: require('../workers/workerNotasPendentes').WorkerNotasPendentes,
     WorkerConsolidationStock: require('../workers/WorkerConsolidationStock').WorkerConsolidationStock,
+    WorkerRecalcularSaldos: require('../workers/WorkerRecalcularSaldos').WorkerRecalcularSaldos,
     ExecuteJobTelemetria: require('../workers/workerTelemetria').ExecuteJobTelemetria,
     WorkerJobConferencia: require('../workers/workerPagamentos').WorkerJobConferencia,
     ExecuteJobSolicitacao: require( '../workers/workerSolicitacaoExtrato').ExecuteJobSolicitacao,

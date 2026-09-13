@@ -133,22 +133,9 @@ async function consolidarProduto(conn, { system_unit_id, dataRef, produtoCodigo 
         ]
     );
 
-    // 7) Atualiza saldo do produto
-    if (docParaRegistro) {
-        await conn.execute(
-            `UPDATE products
-               SET saldo = ?, ultimo_doc = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE system_unit_id = ? AND codigo = ?`,
-            [novoSaldo, docParaRegistro, system_unit_id, produtoCodigo]
-        );
-    } else {
-        await conn.execute(
-            `UPDATE products
-               SET saldo = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE system_unit_id = ? AND codigo = ?`,
-            [novoSaldo, system_unit_id, produtoCodigo]
-        );
-    }
+    // 7) A atualização oficial do saldo em products foi centralizada no WorkerRecalcularSaldos (05:15),
+    // garantindo o recálculo contábil exato a partir do marco zero (Balanço ou Ajuste).
+    // O WorkerConsolidationStock mantém exclusivamente a geração analítica de diferencas_estoque para relatórios/CMV.
 }
 
 /**
