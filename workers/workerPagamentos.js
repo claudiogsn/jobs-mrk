@@ -146,16 +146,16 @@ async function salvarMovimentoCaixa(conn, dados, lojaId, dtInicio, dtFim) {
     }
 }
 
-async function salvarPagamentos(conn, dados, lojaId, dtInicio, dtFim) {
+async function salvarPagamentos(conn, dados, lojaId, dtInicio, dtFim, systemUnitId) {
     if (!dados || dados.length === 0) return;
 
     await conn.execute(`
         DELETE FROM api_pagamentos
-        WHERE id_loja = ? AND data_contabil BETWEEN ? AND ?
-    `, [lojaId, dtInicio, dtFim]);
+        WHERE (system_unit_id = ? OR id_loja = ? OR id_loja = ?) AND data_contabil BETWEEN ? AND ?
+    `, [systemUnitId, String(systemUnitId), String(lojaId), dtInicio, dtFim]);
 
     const rows = dados.map(pg => [
-        uuidv4(), pg.idOperacao, pg.idLoja, pg.nomeLoja, pg.numPedido, pg.seqPedido,
+        uuidv4(), systemUnitId, pg.idOperacao, String(systemUnitId), pg.nomeLoja, pg.numPedido, pg.seqPedido,
         ajustarData(pg.dataContabil), pg.status, ajustarData(pg.dataLancamento),
         pg.horaLancamento, pg.idM, pg.descricao, ajustarData(pg.dataVencimento),
         pg.diasVencimento, pg.valor, pg.taxaComissao, pg.valorComissao,
@@ -164,7 +164,7 @@ async function salvarPagamentos(conn, dados, lojaId, dtInicio, dtFim) {
     ]);
 
     const sql = `INSERT INTO api_pagamentos (
-        uuid, id_operacao, id_loja, nome_loja, num_pedido, seq_pedido, data_contabil,
+        uuid, system_unit_id, id_operacao, id_loja, nome_loja, num_pedido, seq_pedido, data_contabil,
         status_pagamento, data_lancamento, hora_lancamento, id_m, descricao,
         data_vencimento, dias_vencimento, valor, taxa_comissao, valor_comissao,
         valor_liquido, parcela, nsu, origem, adquirente,
@@ -277,11 +277,11 @@ async function ExecuteJobConferencia({ group_id, data } = {}) {
                 SELECT su.id AS system_unit_id, su.custom_code, su.name
                 FROM system_unit AS su
                          JOIN grupo_estabelecimento_rel AS rel ON rel.system_unit_id = su.id
-                WHERE rel.grupo_id = ? AND su.custom_code IS NOT NULL
+                WHERE rel.grupo_id = ? AND su.custom_code IS NOT NULL AND su.menew_integration_faturamento = 1
             `, [groupId]);
             unidades = rows;
         } else {
-            const [rows] = await conn.execute(`SELECT id AS system_unit_id, custom_code, name FROM system_unit WHERE custom_code IS NOT NULL`);
+            const [rows] = await conn.execute(`SELECT id AS system_unit_id, custom_code, name FROM system_unit WHERE custom_code IS NOT NULL AND menew_integration_faturamento = 1`);
             unidades = rows;
         }
 
@@ -341,7 +341,7 @@ async function ExecuteJobConferencia({ group_id, data } = {}) {
                 }, authToken);
 
                 if (respPag?.result?.length) {
-                    await salvarPagamentos(conn, respPag.result, lojaId, dtFormatada, dtFormatada);
+                    await salvarPagamentos(conn, respPag.result, lojaId, dtFormatada, dtFormatada, systemUnitId);
                     log(`  ✅ Pagamentos: ${respPag.result.length} registros`, 'workerConferencia');
                 } else {
                     log(`  ℹ️ Pagamentos: Sem dados`, 'workerConferencia');

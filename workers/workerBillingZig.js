@@ -25,29 +25,49 @@ async function processJobCaixaZig(group_id, dataInicio, dataFim) {
                 continue;
             }
 
+            const systemUnitId = loja.system_unit_id;
             const registrosOriginais = await getZig('faturamento', lojaId, data, data, tokenZig);
 
-            // Filtra os registros, separando os que são BÔNUS
+            // Filtra os registros, separando os que são BÔNUS e descartando meios com valor zero
             const registros = [];
             let valorBonus = 0;
 
             for (const r of registrosOriginais) {
                 if (r.paymentName?.toUpperCase() === 'BÔNUS') {
                     valorBonus += r.value || 0;
-                } else {
-                    registros.push(r);
+                } else if ((r.value || 0) > 0) {
+                    registros.push({
+                        ...r,
+                        system_unit_id: systemUnitId
+                    });
                 }
             }
 
             if (registros.length > 0) {
                 const payload = {
                     method: 'ZigRegisterBilling',
-                    data: { sales: registros }
+                    data: {
+                        sales: registros,
+                        system_unit_id: systemUnitId,
+                        lojaId: lojaId,
+                        data: data
+                    }
                 };
                 const res = await callPHP(payload.method, payload.data);
-                log(`✅ Faturamento loja ${lojaId} em ${data}: ${res?.message || 'sem resposta'}`, 'workerBillingZig');
+                log(`✅ Faturamento loja ${lojaId} (Unidade ${systemUnitId}) em ${data}: ${res?.message || 'sem resposta'}`, 'workerBillingZig');
             } else {
-                log(`ℹ️ Sem registros de faturamento para loja ${lojaId} em ${data}`, 'workerBillingZig');
+                // Se não há vendas no dia, limpa registros prévios zerados se existirem
+                const payload = {
+                    method: 'ZigRegisterBilling',
+                    data: {
+                        sales: [],
+                        system_unit_id: systemUnitId,
+                        lojaId: lojaId,
+                        data: data
+                    }
+                };
+                await callPHP(payload.method, payload.data);
+                log(`ℹ️ Sem registros de faturamento para loja ${lojaId} (Unidade ${systemUnitId}) em ${data}`, 'workerBillingZig');
             }
 
             const estatisticas = await getZigDadosEstatisticos(lojaId, data, tokenZig);
