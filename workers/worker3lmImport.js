@@ -313,14 +313,15 @@ async function run(importId) {
             `, [String(systemUnitId), ...datasArray]);
 
             log(`[3LM Import #${importId}]   -> Limpando em lote da tabela api_pagamentos...`, '3lm_import');
-            // api_pagamentos.id_loja é INT. Algumas unidades (ex.: Casa Iryna)
-            // usam UUID em custom_code, portanto aqui deve ser sempre o id interno.
+            // id_loja é VARCHAR e há registros legados preenchidos com UUID. Usar o
+            // ID interno como texto evita que o MySQL faça coerção numérica da coluna
+            // inteira (o que falha ao encontrar um UUID de outra unidade).
             await conn.execute(`
                 DELETE FROM api_pagamentos
                 WHERE id_loja = ?
                   AND data_contabil IN (${placeholders})
                   AND id_operacao LIKE '3lm-%'
-            `, [systemUnitId, ...datasArray]);
+            `, [String(systemUnitId), ...datasArray]);
 
             // consolidateSalesByUnit soma no que já existe (ON DUPLICATE KEY UPDATE valor = valor + novo),
             // então sem limpar o período antes o BI dobra a cada reimportação da mesma data.
@@ -675,12 +676,14 @@ async function runExclusao(importId, systemUnitId) {
 
             // 2.1. Deleta da api_pagamentos
             log(`[3LM Exclusão #${importId}]   -> Removendo registros da api_pagamentos...`, '3lm_import');
+            // Manter o parâmetro textual para não induzir o MySQL a converter UUIDs
+            // legados presentes na coluna para DOUBLE.
             await conn.execute(`
                 DELETE FROM api_pagamentos 
                 WHERE id_loja = ? 
                   AND data_contabil BETWEEN ? AND ? 
                   AND origem = '3LM'
-            `, [systemUnitId, formattedDataInicio, formattedDataFim]);
+            `, [String(systemUnitId), formattedDataInicio, formattedDataFim]);
 
             // 2.2. Deleta da movimento_caixa
             log(`[3LM Exclusão #${importId}]   -> Removendo registros da movimento_caixa...`, '3lm_import');
