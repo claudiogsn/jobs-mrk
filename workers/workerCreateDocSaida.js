@@ -39,7 +39,11 @@ async function processDocSaida({ group_id, data } = {}) {
         final: DateTime.fromMillis(final).toFormat('yyyy-MM-dd HH:mm:ss')
       });
 
-      log(`✅ Unidade ${system_unit_id} processada com sucesso`, 'workerCreateDocSaida');
+      if (result?.is_cross_unit) {
+        log(`✅ Unidade ${system_unit_id} processada com sucesso (baixa de estoque debitada na unidade central #${result.target_system_unit_id} - doc ${result.doc})`, 'workerCreateDocSaida');
+      } else {
+        log(`✅ Unidade ${system_unit_id} processada com sucesso`, 'workerCreateDocSaida');
+      }
 
     } catch (err) {
       log(`❌ Erro inesperado ao processar unidade ${system_unit_id}: ${err.message}`, 'workerCreateDocSaida');
