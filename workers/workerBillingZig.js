@@ -3,116 +3,88 @@ const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
 const { callPHP, getZig } = require('../utils/utils');
 
-async function processJobCaixaZig(group_id, dataInicio, dataFim) {
-    const lojas = await callPHP('getUnitsIntegrationZigBilling', { group_id });
-
-    if (!Array.isArray(lojas) || lojas.length === 0) {
-        log(`⚠️ Nenhuma loja encontrada para o grupo ${group_id} entre ${dataInicio} e ${dataFim}`, 'workerBillingZig');
-        return;
+function exigirSucesso(resposta, operacao) {
+    if (!resposta || resposta.success !== true) {
+        throw new Error(`${operacao}: ${resposta?.message || 'a API não confirmou a operação'}`);
     }
+}
 
-    log(`🔍 Iniciando processamento de faturamento Zig para o grupo ${group_id} de ${dataInicio} até ${dataFim}`, 'workerBillingZig');
-
+async function processJobCaixaZig(group_id, dataInicio, dataFim) {
+    dataInicio = dataInicio || DateTime.now().setZone('America/Fortaleza').minus({ days: 1 }).toISODate();
+    dataFim = dataFim || dataInicio;
+    const lojas = await callPHP('getUnitsIntegrationZigBilling', { group_id });
+    if (!Array.isArray(lojas)) throw new Error('Não foi possível consultar as unidades Zig.');
+    if (lojas.length === 0) return;
     const dias = gerarIntervaloDatas(dataInicio, dataFim);
-
+    const falhas = [];
     for (const data of dias) {
         for (const loja of lojas) {
             const lojaId = loja.lojaId;
             const tokenZig = loja.token_zig;
-
-            if (!lojaId || !tokenZig) {
-                log(`⚠️ Dados faltando para loja: ${JSON.stringify(loja)}`, 'workerBillingZig');
-                continue;
-            }
-
             const systemUnitId = loja.system_unit_id;
-            const registrosOriginais = await getZig('faturamento', lojaId, data, data, tokenZig);
-
-            // Filtra os registros, separando os que são BÔNUS e descartando meios com valor zero
-            const registros = [];
-            let valorBonus = 0;
-
-            for (const r of registrosOriginais) {
-                if (r.paymentName?.toUpperCase() === 'BÔNUS') {
-                    valorBonus += r.value || 0;
-                } else if ((r.value || 0) > 0) {
-                    registros.push({
-                        ...r,
-                        system_unit_id: systemUnitId
+            try {
+                if (!lojaId || !tokenZig || !systemUnitId) throw new Error('Unidade Zig sem configuração completa.');
+                const registrosOriginais = await getZig('faturamento', lojaId, data, data, tokenZig, { strict: true });
+                if (!Array.isArray(registrosOriginais)) throw new Error('Faturamento Zig inválido.');
+                const registros = [];
+                let valorBonus = 0;
+                for (const r of registrosOriginais) {
+                    const valor = Number(r.value ?? 0);
+                    if (!Number.isFinite(valor)) throw new Error('Valor de pagamento Zig inválido.');
+                    if (r.paymentName?.toUpperCase() === 'BÔNUS') valorBonus += valor;
+                    else if (valor > 0) {
+                        for (const campo of ['paymentId', 'eventId', 'eventDate', 'lojaId', 'redeId']) {
+                            if (r[campo] == null || r[campo] === '') throw new Error(`Pagamento Zig sem ${campo}.`);
+                        }
+                        registros.push({ ...r, system_unit_id: systemUnitId });
+                    }
+                }
+                // Consulta todas as estatísticas antes de substituir dados já importados.
+                const estatisticas = registros.length ? await getZigDadosEstatisticos(lojaId, data, tokenZig) : null;
+                const resposta = await callPHP('ZigRegisterBilling', {
+                    sales: registros, system_unit_id: systemUnitId, lojaId, data
+                });
+                exigirSucesso(resposta, 'Registrar faturamento Zig');
+                if (estatisticas) {
+                    const respostaEstatisticas = await callPHP('ZigUpdateStatics', {
+                        data, lojaId, system_unit_id: systemUnitId,
+                        descontos: estatisticas.descontos + Number((valorBonus / 100).toFixed(2)),
+                        gorjeta: estatisticas.gorjeta, total_clientes: estatisticas.total_clientes
                     });
+                    exigirSucesso(respostaEstatisticas, 'Atualizar estatísticas Zig');
                 }
+                log(`Faturamento e estatísticas da unidade ${systemUnitId} em ${data} processados.`, 'workerBillingZig');
+            } catch (err) {
+                falhas.push(`unidade ${systemUnitId}, ${data}: ${err.message}`);
+                log(`Falha no faturamento Zig da unidade ${systemUnitId} em ${data}: ${err.message}`, 'workerBillingZig');
             }
-
-            if (registros.length > 0) {
-                const payload = {
-                    method: 'ZigRegisterBilling',
-                    data: {
-                        sales: registros,
-                        system_unit_id: systemUnitId,
-                        lojaId: lojaId,
-                        data: data
-                    }
-                };
-                const res = await callPHP(payload.method, payload.data);
-                log(`✅ Faturamento loja ${lojaId} (Unidade ${systemUnitId}) em ${data}: ${res?.message || 'sem resposta'}`, 'workerBillingZig');
-            } else {
-                // Se não há vendas no dia, limpa registros prévios zerados se existirem
-                const payload = {
-                    method: 'ZigRegisterBilling',
-                    data: {
-                        sales: [],
-                        system_unit_id: systemUnitId,
-                        lojaId: lojaId,
-                        data: data
-                    }
-                };
-                await callPHP(payload.method, payload.data);
-                log(`ℹ️ Sem registros de faturamento para loja ${lojaId} (Unidade ${systemUnitId}) em ${data}`, 'workerBillingZig');
-            }
-
-            const estatisticas = await getZigDadosEstatisticos(lojaId, data, tokenZig);
-
-            const staticPayload = {
-                method: 'ZigUpdateStatics',
-                data: {
-                    data,
-                    lojaId,
-                    descontos: (estatisticas.descontos || 0) + parseFloat((valorBonus / 100).toFixed(2)),
-                    gorjeta: estatisticas.gorjeta,
-                    total_clientes: estatisticas.total_clientes
-                }
-            };
-
-            const res2 = await callPHP(staticPayload.method, staticPayload.data);
-            log(`📊 Estatísticas loja ${lojaId} em ${data}: ${res2?.message || 'sem resposta'}`, 'workerBillingZig');
         }
     }
+    if (falhas.length) throw new Error(`Falha em ${falhas.length} processamento(s) Zig: ${falhas.join('; ')}`);
 }
 
 function gerarIntervaloDatas(inicio, fim) {
-    const datas = [];
-    let atual = new Date(`${inicio}T00:00:00`);
-    const ultima = new Date(`${fim}T00:00:00`);
-
-    while (atual <= ultima) {
-        const ano = atual.getFullYear();
-        const mes = String(atual.getMonth() + 1).padStart(2, '0');
-        const dia = String(atual.getDate()).padStart(2, '0');
-        datas.push(`${ano}-${mes}-${dia}`);
-        atual.setDate(atual.getDate() + 1);
+    let atual = DateTime.fromISO(inicio, { zone: 'America/Fortaleza' });
+    const ultima = DateTime.fromISO(fim, { zone: 'America/Fortaleza' });
+    if (!atual.isValid || !ultima.isValid || atual.toISODate() !== inicio || ultima.toISODate() !== fim || atual > ultima) {
+        throw new Error('Período Zig inválido ou invertido.');
     }
-    console .log(`📅 Intervalo de datas gerado: ${datas.join(', ')}`, 'workerBillingZig');
-
+    const datas = [];
+    while (atual <= ultima) {
+        datas.push(atual.toISODate());
+        atual = atual.plus({ days: 1 });
+    }
     return datas;
 }
 
 async function getZigDadosEstatisticos(lojaId, data, tokenZig) {
     try {
         const [saida, mesas] = await Promise.all([
-            getZig('saida-produtos', lojaId, data, data, tokenZig),
-            getZig('tables', lojaId, data, data, tokenZig)
+            getZig('saida-produtos', lojaId, data, data, tokenZig, { strict: true }),
+            getZig('tables', lojaId, data, data, tokenZig, { strict: true })
         ]);
 
+        if (!Array.isArray(saida) || !Array.isArray(mesas)) throw new Error('Estatísticas Zig inválidas.');
         let descontos = 0;
         let gorjeta = 0;
 
@@ -145,11 +117,7 @@ async function getZigDadosEstatisticos(lojaId, data, tokenZig) {
         };
     } catch (err) {
         log(`❌ Erro ao buscar estatísticas do Zig para loja ${lojaId} em ${data}: ${err.message}`, 'workerBillingZig');
-        return {
-            descontos: 0,
-            gorjeta: 0,
-            total_clientes: 0
-        };
+        throw err;
     }
 }
 

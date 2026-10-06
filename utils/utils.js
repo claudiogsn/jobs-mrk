@@ -123,7 +123,7 @@ async function loginMenew() {
     }
 }
 
-async function getZig(endpoint, lojaId, dtinicio, dtfim, tokenZig) {
+async function getZig(endpoint, lojaId, dtinicio, dtfim, tokenZig, { strict = false } = {}) {
     const url = `${process.env.ZIG_URL_INTEGRATION}/${endpoint}?dtinicio=${dtinicio}&dtfim=${dtfim}&loja=${lojaId}`;
 
     appendApiLog('zig', `➡️ REQ Zig [${lojaId}] [${endpoint}]: ${url}`);
@@ -137,10 +137,12 @@ async function getZig(endpoint, lojaId, dtinicio, dtfim, tokenZig) {
 
         const logBody = JSON.stringify(res.data);
         appendApiLog('zig', `✅ RES Zig [${lojaId}] [${endpoint}]: ${logBody.length > 1000 ? logBody.substring(0, 1000) + '... [truncated]' : logBody}`);
+        if (strict && !Array.isArray(res.data)) throw new Error('Resposta Zig inválida: esperada uma lista.');
         return res.data || [];
     } catch (err) {
         const errorData = err.response?.data || err.message || 'Erro desconhecido';
         appendApiLog('zig', `❌ ERROR Zig [${lojaId}] [${endpoint}]: ${JSON.stringify(errorData)}`);
+        if (strict) throw new Error(`Falha ao consultar Zig (${endpoint}, HTTP ${err.response?.status || 'indisponível'}).`);
         return [];
     }
 }

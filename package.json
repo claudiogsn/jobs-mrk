@@ -14,7 +14,8 @@
     "worker:consolidate": "node workers/workerConsolidateSales.js",
     "worker:docsaida": "node workers/workerCreateDocSaida.js",
     "worker:itemvenda": "node workers/workerItemVenda.js",
-    "worker:caixa": "node workers/workerMovimentoCaixa.js"
+    "worker:caixa": "node workers/workerMovimentoCaixa.js",
+    "test:faturamento": "node --test tests/faturamento.test.js"
   },
   "dependencies": {
     "@mrksolucoes/observability": "*",

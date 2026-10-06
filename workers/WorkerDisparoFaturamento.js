@@ -2,6 +2,7 @@ require('dotenv').config();
 const { publishToQueue, connect, QUEUES } = require('../utils/rabbitmq');
 const { callPHP, formatCurrency, calcularVariacao } = require('../utils/utils');
 const { log } = require('../utils/logger');
+const { normalizarResumo, validarIntervalos } = require('../utils/resumoFaturamento');
 
 // Função auxiliar para calcular datas se uma data específica for fornecida
 function calcularIntervalosManuais(dataString) {
@@ -38,7 +39,7 @@ async function enviarResumoDiario(contato, grupo, dataEspecifica = null) {
         intervalos = await callPHP('getIntervalosDiarios', {});
     }
 
-    const { dt_inicio, dt_fim, dt_inicio_anterior, dt_fim_anterior } = intervalos;
+    const { dt_inicio, dt_fim, dt_inicio_anterior, dt_fim_anterior } = validarIntervalos(intervalos);
     const dataRef = dt_inicio.split(' ')[0].split('-').reverse().join('/');
 
     const unidades = await callPHP('getUnitsByGroup', { group_id: groupId });
@@ -60,22 +61,20 @@ async function enviarResumoDiario(contato, grupo, dataEspecifica = null) {
     };
 
     for (const unidade of unidades) {
-        const { custom_code, name: unitName } = unidade;
+        const { custom_code, system_unit_id, name: unitName } = unidade;
 
-        const [resumoOntem, resumoSemanaPassada] = await Promise.all([
+        const [respostaOntem, respostaSemanaPassada] = await Promise.all([
             callPHP('generateResumoFinanceiroPorLoja', {
-                lojaid: custom_code, dt_inicio, dt_fim
+                lojaid: custom_code, system_unit_id, dt_inicio, dt_fim
             }),
             callPHP('generateResumoFinanceiroPorLoja', {
-                lojaid: custom_code, dt_inicio: dt_inicio_anterior, dt_fim: dt_fim_anterior
+                lojaid: custom_code, system_unit_id, dt_inicio: dt_inicio_anterior, dt_fim: dt_fim_anterior
             })
         ]);
 
 
-        if (!resumoOntem || !resumoSemanaPassada) {
-            log(`⚠️ Sem resumo para ${unitName}`, 'enviarResumoDiario');
-            continue;
-        }
+        const resumoOntem = normalizarResumo(respostaOntem);
+        const resumoSemanaPassada = normalizarResumo(respostaSemanaPassada);
 
         if (
             resumoOntem.faturamento_bruto === 0 &&
@@ -88,7 +87,7 @@ async function enviarResumoDiario(contato, grupo, dataEspecifica = null) {
 
         corpoMensagem +=
             `📍 *${unitName}*
-💰 Bruto: *${formatCurrency(resumoOntem.faturamento_bruto)}* [Vs ${formatCurrency(resumoSemanaPassada.faturamento_bruto)}]
+💰 ${resumoOntem.faturamento_provisorio ? 'Valor importado' : 'Bruto'}: *${formatCurrency(resumoOntem.faturamento_bruto)}* [Vs ${formatCurrency(resumoSemanaPassada.faturamento_bruto)}]
 💵 Líquido: *${formatCurrency(resumoOntem.faturamento_liquido)}* [Vs ${formatCurrency(resumoSemanaPassada.faturamento_liquido)}]
 🗒 N.Pedidos Presencial: *${resumoOntem.pedidos_presencial || 0}* [Vs ${resumoSemanaPassada.pedidos_presencial}]
 🛵 N.Pedidos Delivery: *${resumoOntem.pedidos_delivery || 0}* [Vs ${resumoSemanaPassada.pedidos_delivery}]
@@ -97,7 +96,7 @@ async function enviarResumoDiario(contato, grupo, dataEspecifica = null) {
 👥 Clientes: *${resumoOntem.numero_clientes}* [Vs ${resumoSemanaPassada.numero_clientes}]
 📈 Ticket Médio: *${formatCurrency(resumoOntem.ticket_medio)}* [Vs ${formatCurrency(resumoSemanaPassada.ticket_medio)}]
 
-Variação de Faturamento Liq.: ${calcularVariacao(resumoOntem.faturamento_liquido, resumoSemanaPassada.faturamento_liquido)}
+${resumoOntem.faturamento_provisorio || resumoSemanaPassada.faturamento_provisorio ? '⚠️ Estatísticas de descontos, taxa de serviço e clientes ainda pendentes em parte do período.\n' : ''}Variação de Faturamento Liq.: ${calcularVariacao(resumoOntem.faturamento_liquido, resumoSemanaPassada.faturamento_liquido)}
 Variação de N.Pedidos Presencial: ${calcularVariacao(resumoOntem.pedidos_presencial, resumoSemanaPassada.pedidos_presencial)}
 Variação de N.Pedidos Delivery: ${calcularVariacao(resumoOntem.pedidos_delivery, resumoSemanaPassada.pedidos_delivery)}
 

@@ -2,16 +2,17 @@ require('dotenv').config();
 const { callPHP, formatCurrency, calcularVariacao, sendWhatsappPdf, sendWhatsappText, calcularVariacaoReverse, calcularVariacaoSemBola} = require('../utils/utils');
 const { log } = require('../utils/logger');
 const axios = require('axios');
+const { normalizarResumoGrupo, validarIntervalos } = require('../utils/resumoFaturamento');
 
 
 async function gerarPdfFaturamento(group_id) {
     const result = await callPHP('gerarPdfSemanalFaturamento', { group_id });
-    return result.success ? result.url : null;
+    return result?.success ? result.url : null;
 }
 
 async function gerarPdfCompras(group_id) {
     const result = await callPHP('gerarPdfSemanalCompras', { group_id });
-    return result.success ? result.url : null;
+    return result?.success ? result.url : null;
 }
 
 async function enviarResumoSemanal(contato, grupo) {
@@ -19,7 +20,7 @@ async function enviarResumoSemanal(contato, grupo) {
     const grupoId = grupo.id;
     const grupoNome = grupo.nome;
 
-    const intervalos = await callPHP('getIntervalosSemanais', {});
+    const intervalos = validarIntervalos(await callPHP('getIntervalosSemanais', {}));
     const { dt_inicio, dt_fim, dt_inicio_anterior, dt_fim_anterior } = intervalos;
 
     const dataInicioStr = dt_inicio.split(' ')[0].split('-').reverse().join('/');
@@ -65,8 +66,17 @@ async function enviarResumoSemanal(contato, grupo) {
         return total;
     }
 
-    const rAtual = somarResumo(resumoAtual.data || []);
-    const rAnt = somarResumo(resumoAnterior.data || []);
+    const dadosAtual = normalizarResumoGrupo(resumoAtual);
+    const dadosAnterior = normalizarResumoGrupo(resumoAnterior);
+    if (dadosAtual.length === 0) return false;
+    for (const notas of [notasAtual, notasAnterior]) {
+        if (!notas || notas.success !== true || !Array.isArray(notas.data)) {
+            throw new Error('A API não retornou as compras do resumo semanal.');
+        }
+    }
+    const provisorio = [...dadosAtual, ...dadosAnterior].some(r => r.faturamento_provisorio);
+    const rAtual = somarResumo(dadosAtual);
+    const rAnt = somarResumo(dadosAnterior);
     const comprasAtual = somarNotas(notasAtual);
     const comprasAnterior = somarNotas(notasAnterior);
 
@@ -97,11 +107,11 @@ async function enviarResumoSemanal(contato, grupo) {
 🌅 Boa tarde, *${nome}*!
 Segue resumo semanal do *${grupoNome}*, referente a ${dataInicioStr} a ${dataFimStr}:
 
-💰 Faturamento: ${formatCurrency(rAtual.faturamento_bruto)} [Vs ${formatCurrency(rAnt.faturamento_bruto)}]
+💰 ${provisorio ? 'Faturamento provisório' : 'Faturamento'}: ${formatCurrency(rAtual.faturamento_bruto)} [Vs ${formatCurrency(rAnt.faturamento_bruto)}]
 🛒 Compras: ${formatCurrency(comprasAtual)} [Vs ${formatCurrency(comprasAnterior)}]
 📊 %CMC: ${percentualCMV.toFixed(2)}% [Vs ${percentualCMVAnterior.toFixed(2)}%]
 
-Variação Faturamento: ${calcularVariacaoSemBola(rAtual.faturamento_bruto, rAnt.faturamento_bruto)}
+${provisorio ? '⚠️ Estatísticas de descontos, taxa de serviço e clientes ainda pendentes em parte do período.\n' : ''}Variação Faturamento: ${calcularVariacaoSemBola(rAtual.faturamento_bruto, rAnt.faturamento_bruto)}
 Variação Compras: ${calcularVariacaoSemBola(comprasAtual, comprasAnterior)}
 Variação %CMC: ${calcularVariacaoReverse(percentualCMV, percentualCMVAnterior)}
 
