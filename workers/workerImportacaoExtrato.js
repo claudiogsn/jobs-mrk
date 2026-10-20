@@ -3,6 +3,7 @@ require('dotenv').config({ path: path.resolve('../.env') });
 const mysql = require('mysql2/promise');
 const { log } = require('../utils/logger');
 const { callTecnoSpeed } = require('../utils/utils'); // <--- Importando nosso wrapper
+const { filtrarDuplicadasEntreImportacoes } = require('../utils/dedupExtrato');
 
 const CHUNK_SIZE = 500;
 const API_URL = process.env.TECNOSPEED_API_URL || 'https://api.pagamentobancario.com.br';
@@ -120,7 +121,15 @@ async function ExecuteJobImportacao() {
                     const debitos     = (response.data.transaction?.debit || []).map(t => ({ ...t, type: t.transactionType || 'debit' }));
                     const creditosDup = (response.data.transactionDuplicated?.credit || []).map(t => ({ ...t, type: t.transactionType || 'credit' }));
                     const debitosDup  = (response.data.transactionDuplicated?.debit || []).map(t => ({ ...t, type: t.transactionType || 'debit' }));
-                    const transacoes  = [...creditos, ...debitos, ...creditosDup, ...debitosDup];
+                    const recebidas   = [...creditos, ...debitos, ...creditosDup, ...debitosDup];
+
+                    // Mesma transação reenviada com outro id (ou já importada via OFX) não entra de novo
+                    const { transacoes, ignoradas } = await filtrarDuplicadasEntreImportacoes(
+                        conn, importTask.system_unit_id, importTask.account_id, recebidas
+                    );
+                    if (ignoradas > 0) {
+                        log(`    ♻️  ${ignoradas} transação(ões) duplicada(s) de outra importação ignorada(s).`, 'workerImportacao');
+                    }
 
                     const savedQtd = await salvarTransacoes(conn, transacoes, importTask.system_unit_id, importTask.account_id);
 
