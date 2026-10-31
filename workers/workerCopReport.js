@@ -5,18 +5,11 @@ const PdfPrinter = require('pdfmake');
 const axios = require('axios');
 const { callPHP, sendWhatsappPdf, sendWhatsappText } = require('../utils/utils');
 const { log } = require('../utils/logger');
+const storage = require('../utils/storage');
 
 // ================== CONFIG BÁSICA ==================
 
-const IS_PROD = process.env.NODE_ENV === 'production';
-
-// Diretório padrão onde os PDFs serão salvos
-// - Em produção: /var/www/html/reports  (URL: ${PUBLIC_BASE_REPORT_URL}/arquivo.pdf)
-// - Em dev/local: pasta "reports" ao lado deste arquivo
-const DEFAULT_REPORTS_DIR = path.join(__dirname, 'reports');
-
-// URL base pública para os relatórios (usar algo tipo https://portal.mrksolucoes.com.br/reports)
-const PUBLIC_BASE_REPORT_URL = process.env.PUBLIC_BASE_REPORT_URL || null;
+// Os PDFs vão para o S3 (utils/storage.js), não para o disco.
 
 // ID do disparo cadastrado no sistema para esse tipo de auditoria COP
 const ID_DISPARO_COP = parseInt(process.env.ID_DISPARO_COP || '18', 10);
@@ -318,15 +311,11 @@ async function generateCopPdf({
                                   unit_name,
                                   dt_inicio,
                                   dt_fim,
-                                  apiData,
-                                  outputDir = DEFAULT_REPORTS_DIR
+                                  apiData
                               }) {
     if (!system_unit_id || !dt_inicio || !dt_fim) {
         throw new Error('Parâmetros obrigatórios: system_unit_id, dt_inicio, dt_fim');
     }
-
-    // Garante que a pasta existe
-    fs.mkdirSync(outputDir, { recursive: true });
 
     log(
         `[COP] Gerando PDF para unidade ${system_unit_id} (${unit_name || ''}) período ${dt_inicio} a ${dt_fim}...`,
@@ -347,39 +336,17 @@ async function generateCopPdf({
         .replace(/[^\w\-]+/g, '_');
 
     const fileName = `COP_${system_unit_id}_${safeUnitName}_${dt_inicio}_${dt_fim}.pdf`;
-    const outputPath = path.join(outputDir, fileName);
 
-    return new Promise((resolve, reject) => {
-        try {
-            const pdfDoc = printer.createPdfKitDocument(docDefinition);
-            const stream = fs.createWriteStream(outputPath);
-            pdfDoc.pipe(stream);
-            pdfDoc.end();
-
-            stream.on('finish', () => {
-                log(`[COP] PDF gerado com sucesso em: ${outputPath}`, 'generateCopPdf');
-
-                const publicUrl =
-                    IS_PROD && PUBLIC_BASE_REPORT_URL
-                        ? `${PUBLIC_BASE_REPORT_URL.replace(/\/+$/, '')}/${fileName}`
-                        : null;
-
-                if (publicUrl) {
-                    log(`[COP] URL pública: ${publicUrl}`, 'generateCopPdf');
-                }
-
-                resolve({ filePath: outputPath, fileName, publicUrl, apiData: data });
-            });
-
-            stream.on('error', (err) => {
-                log(`[COP] Erro ao salvar PDF: ${err.message}`, 'generateCopPdf');
-                reject(err);
-            });
-        } catch (err) {
-            log(`[COP] Erro ao criar documento PDF: ${err.message}`, 'generateCopPdf');
-            reject(err);
-        }
-    });
+    // PDF em memória -> S3 (private/jobs-mrk/reports/); a Z-API baixa por link temporário.
+    try {
+        const buffer = await storage.pdfToBuffer(printer.createPdfKitDocument(docDefinition));
+        const publicUrl = await storage.publishReport(fileName, buffer);
+        log(`[COP] PDF ${fileName} gravado no S3 (${buffer.length} bytes)`, 'generateCopPdf');
+        return { fileName, publicUrl, apiData: data };
+    } catch (err) {
+        log(`[COP] Erro ao gerar/gravar PDF: ${err.message}`, 'generateCopPdf');
+        throw err;
+    }
 }
 
 // ================== MENSAGEM DE WHATSAPP ==================
@@ -501,7 +468,7 @@ async function enviarAuditoriaCop(contato, grupo) {
                 await sendWhatsappPdf(telefone, publicUrl);
             } else {
                 log(
-                    `⚠️ PUBLIC_BASE_REPORT_URL não configurada. PDF gerado localmente, mas sem URL pública para envio.`,
+                    `⚠️ PDF sem link para envio.`,
                     'enviarAuditoriaCop'
                 );
             }

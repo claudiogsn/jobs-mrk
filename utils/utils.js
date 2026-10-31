@@ -161,7 +161,13 @@ async function sendWhatsappText(telefone, mensagem) {
 }
 
 async function sendWhatsappPdf(telefone, url) {
-    const fileName = url.split('/').pop();
+    // O link pode ser pré-assinado (S3): o nome vem do caminho, sem a query string.
+    let fileName;
+    try {
+        fileName = decodeURIComponent(new URL(url).pathname.split('/').pop());
+    } catch {
+        fileName = url.split('?')[0].split('/').pop();
+    }
     try {
         const response = await axios.post(
             `${process.env.ZAPI_BASE_URL}/instances/${process.env.ZAPI_INSTANCE_ID}/token/${process.env.ZAPI_INSTANCE_TOKEN}/send-document/pdf`,

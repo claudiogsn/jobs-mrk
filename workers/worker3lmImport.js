@@ -6,7 +6,9 @@ const { log } = require('../utils/logger');
 const { DateTime } = require('luxon');
 const { randomUUID } = require('crypto');
 
-const UPLOAD_3LM_DIR = process.env.UPLOAD_3LM_DIR || '/Users/claudiogomes/projects/portal-mrk/api/v1/public/uploads/3lm';
+// CSV gravado pelo portal no S3: private/portal-mrk/api/v1/public/uploads/3lm/import_<id>.csv
+const storage = require('../utils/storage');
+const csvPath3lm = (importId) => `api/v1/public/uploads/3lm/import_${importId}.csv`;
 
 // Helper para converter string BRL (ex: "1.230,50") para float
 function parseBRL(val) {
@@ -130,13 +132,13 @@ async function run(importId) {
         // 2. Reserva a tarefa para evitar duplicidade de execução
         await conn.execute("UPDATE 3lm_imports SET status = 'processando' WHERE id = ?", [importId]);
 
-        const filePath = path.join(UPLOAD_3LM_DIR, `import_${importId}.csv`);
-        if (!fs.existsSync(filePath)) {
-            throw new Error(`Arquivo temporário do CSV não foi encontrado no servidor: ${filePath}`);
+        const csvBuffer = await storage.get(csvPath3lm(importId), 'portal-mrk');
+        if (!csvBuffer) {
+            throw new Error(`Arquivo do CSV não foi encontrado no S3: ${csvPath3lm(importId)}`);
         }
 
         // 3. Lê o CSV
-        const csvContent = fs.readFileSync(filePath, 'utf8');
+        const csvContent = csvBuffer.toString('utf8');
         const lines = csvContent.replace(/\r/g, '').split('\n');
 
         log(`[3LM Import #${importId}] 📂 [Passo 2/6] Analisando e estruturando dados do CSV (Total de ${lines.length} linhas)...`, '3lm_import');
@@ -752,9 +754,10 @@ async function runExclusao(importId, systemUnitId) {
         // 4. Remove a importação da tabela 3lm_imports e o arquivo CSV
         await conn.execute("DELETE FROM 3lm_imports WHERE id = ?", [importId]);
 
-        const filePath = path.join(UPLOAD_3LM_DIR, `import_${importId}.csv`);
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
+        try {
+            await storage.remove(csvPath3lm(importId), 'portal-mrk');
+        } catch (errS3) {
+            log(`[3LM Exclusão #${importId}] ⚠️ Falha ao apagar o CSV no S3: ${errS3.message}`, '3lm_import');
         }
 
         log(`[3LM Exclusão #${importId}] 🔔 Gerando notificação de exclusão no painel do usuário...`, '3lm_import');

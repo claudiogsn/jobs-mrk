@@ -433,19 +433,22 @@ async function generateBioneProposalNode(propostaId, showPrice = true) {
         };
 
         log(`[2/3] Gerando PDF...`, 'workerProposta');
-        const pdfDoc = printer.createPdfKitDocument(docDefinition);
-        const reportsDir = path.join(__dirname, 'reports');
-        if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir);
-
+        // Script manual: o PDF vai para o S3 (private/jobs-mrk/reports/), não para o disco.
+        const storage = require('../utils/storage');
         const fileName = `Proposta_${propostaId}.pdf`;
-        pdfDoc.pipe(fs.createWriteStream(path.join(reportsDir, fileName)));
-        pdfDoc.end();
+        const buffer = await storage.pdfToBuffer(printer.createPdfKitDocument(docDefinition));
+        const link = await storage.publishReport(fileName, buffer);
 
-        log(`✅ [3/3] Sucesso! PDF salvo em: reports/${fileName}`, 'workerProposta');
+        log(`✅ [3/3] Sucesso! PDF ${fileName} no S3. Link (1 h): ${link}`, 'workerProposta');
 
     } catch (err) {
         getLogger().error(err, { worker: 'workerProposta', propostaId });
     }
 }
 
-generateBioneProposalNode('319022026', true);
+// Execução manual: node workers/workerProposta.js <propostaId>
+if (require.main === module) {
+    generateBioneProposalNode(process.argv[2] || '319022026', true);
+}
+
+module.exports = { generateBioneProposalNode };

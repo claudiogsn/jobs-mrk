@@ -6,13 +6,10 @@ const PdfPrinter = require('pdfmake');
 
 const { callPHP, sendWhatsappText, sendWhatsappPdf } = require('../utils/utils');
 const { log } = require('../utils/logger');
+const storage = require('../utils/storage');
 
 // ================== CONFIG ==================
 
-// Não grave relatórios dentro de `workers`: essa pasta é observada pelo PM2 e
-// a criação do PDF faria a API reiniciar durante o envio ao WhatsApp.
-const REPORTS_DIR = path.join(__dirname, '..', 'reports');
-const PUBLIC_BASE_REPORT_URL = process.env.PUBLIC_BASE_REPORT_URL;
 
 const fonts = {
     Roboto: {
@@ -193,24 +190,12 @@ function buildPdfDefinition(header, items) {
     return docDefinition;
 }
 
+// PDF em memória -> S3 (private/jobs-mrk/reports/); devolve o link temporário para a Z-API.
 async function generateTransferPdf(header, items) {
-    fs.mkdirSync(REPORTS_DIR, { recursive: true });
-
     const fileName = `TRANSFERENCIA_${header.transfer_key}.pdf`;
-    const filePath = path.join(REPORTS_DIR, fileName);
-
     const docDefinition = buildPdfDefinition(header, items);
-    const pdfDoc = printer.createPdfKitDocument(docDefinition);
-
-    const stream = fs.createWriteStream(filePath);
-    pdfDoc.pipe(stream);
-    pdfDoc.end();
-
-    await new Promise(resolve => stream.on('finish', resolve));
-
-    if (!PUBLIC_BASE_REPORT_URL) return null;
-
-    return `${PUBLIC_BASE_REPORT_URL.replace(/\/+$/, '')}/${fileName}`;
+    const buffer = await storage.pdfToBuffer(printer.createPdfKitDocument(docDefinition));
+    return storage.publishReport(fileName, buffer);
 }
 
 // ================== WHATSAPP ==================

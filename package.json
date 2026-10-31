@@ -18,6 +18,8 @@
     "test:faturamento": "node --test tests/faturamento.test.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1161.0",
+    "@aws-sdk/s3-request-presigner": "^3.1161.0",
     "@mrksolucoes/observability": "*",
     "amqplib": "^1.0.2",
     "axios": "^1.13.2",

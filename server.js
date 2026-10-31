@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const { getLogs,log} = require('./utils/logger');
+const storage = require('./utils/storage');
 const { getLogger, requestContextMiddleware } = require('@mrksolucoes/observability');
 const { sendWhatsappText, getConnection } = require('./utils/utils');
 const { appendApiLog } = require('./utils/apiLogger');
@@ -45,10 +46,6 @@ const {DateTime} = require("luxon");
 const app = express();
 const router = express.Router();
 const PORT = process.env.PORT || 3005;
-// Novos relatórios são criados fora de `workers`, que é observado pelo PM2.
-const REPORTS_DIR = path.join(__dirname, 'reports');
-// Mantém acessíveis os comprovantes criados antes da alteração de diretório.
-const LEGACY_REPORTS_DIR = path.join(__dirname, 'workers', 'reports');
 
 app.use(express.json());
 // Contexto de requisição: requestId/correlationId + trace/span + log de entrada/saída.
@@ -73,8 +70,24 @@ router.get('/logo.png', (req, res) => {
     res.sendFile(path.join(__dirname, 'assets/logo.png'));
 });
 
-router.use('/reports', express.static(REPORTS_DIR));
-router.use('/reports', express.static(LEGACY_REPORTS_DIR));
+// Relatórios no S3 (private/jobs-mrk/reports/ e, dos antigos, workers/reports/): o endereço
+// /jobs/reports/<arquivo> redireciona para um link temporário.
+router.get('/reports/:file', async (req, res) => {
+    const file = String(req.params.file || '');
+    if (!/^[\w.-]+\.pdf$/i.test(file) || file.includes('..')) return res.status(404).end();
+    try {
+        for (const dir of ['reports', 'workers/reports']) {
+            if (await storage.exists(`${dir}/${file}`)) {
+                res.set('Cache-Control', 'private, no-store');
+                return res.redirect(302, await storage.url(`${dir}/${file}`, 900));
+            }
+        }
+        return res.status(404).end();
+    } catch (err) {
+        log(`❌ Erro ao buscar relatório ${file} no S3: ${err.message}`, 'reports');
+        return res.status(503).end();
+    }
+});
 
 
 // === API Explorer Dinâmico ===
@@ -978,13 +991,9 @@ router.post('/reload-cron', async (req, res) => {
 });
 
 // === Logs ===
+// Os logs não ficam mais em arquivo: vão para o stdout (CloudWatch).
 router.get('/logs', (req, res) => {
-    const logFilePath = path.resolve(__dirname, 'logs/api.log');
-    fs.readFile(logFilePath, 'utf8', (err, data) => {
-        if (err) return res.status(500).json({ error: 'Erro ao ler o arquivo de log.' });
-        const lines = data.trim().split('\n');
-        res.json(lines);
-    });
+    res.status(410).json({ error: 'Logs em arquivo desativados: consulte o CloudWatch.' });
 });
 
 router.get('/stdout', (req, res) => {

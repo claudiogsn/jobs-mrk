@@ -21,21 +21,9 @@ const methods = [
     'importarSaldoContaApi'
 ];
 
-const LOG_DIR = path.resolve(__dirname, '../logs');
-const LOG_PATH = path.resolve(LOG_DIR, 'api.log');
-
-// Cria diretório e arquivo se necessário
-if (!fs.existsSync(LOG_DIR)) {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-}
-if (!fs.existsSync(LOG_PATH)) {
-    fs.writeFileSync(LOG_PATH, '');
-}
-
+// Log das chamadas de API: stdout (CloudWatch), não mais logs/api.log em disco.
 function appendApiLog(content) {
-    const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] ${content}\n`;
-    fs.appendFileSync(LOG_PATH, logEntry);
+    log(content, 'workerFinanceiro');
 }
 
 async function callPHP(method, data) {
