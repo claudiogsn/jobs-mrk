@@ -1,15 +1,13 @@
-# Deploy na AWS (stack mrk). Mesmo arquivo nos quatro repositórios, mantido em claudiogsn/mrk-infra (templates/github-actions):
-# mrk-core, mrk-cliente-front, mrk-admin-front e jobs-mrk (o mesmo arquivo nos quatro).
+# Deploy na AWS (stack portal-mrk, o sistema legado). Mesmo arquivo nos cinco repositórios,
+# mantido em claudiogsn/mrk-infra (templates/github-actions/deploy-portal-mrk.yml):
+# portal-mrk, mobile-mrk, mrk-suporte-core, mrk-suporte-front e jobs-mrk.
 #
 # Variáveis do repositório (Settings > Secrets and variables > Actions > Variables),
-# valores no output "github_actions.<servico>" do Terraform (envs/prod):
+# valores no output "portal_mrk_github_actions.<servico>" do Terraform (envs/prod):
 #   AWS_REGION, AWS_DEPLOY_ROLE_ARN, ECR_REPOSITORY, IMAGE_PARAMETER
 #
-# O servidor é Graviton: a imagem é linux/arm64. Os Dockerfiles de templates/docker compilam na
-# arquitetura do runner (BUILDPLATFORM) e só a imagem final é arm64, então o QEMU quase não trabalha.
-#
-# Os BFFs leem a URL do core em tempo de execução (BACKEND_API_URL, definida no Terraform). Só
-# variáveis NEXT_PUBLIC_* precisariam entrar no build, como build-arg.
+# O servidor é Graviton: a imagem é linux/arm64. Go e Node compilam na arquitetura do runner
+# (BUILDPLATFORM); só a imagem PHP (portal e mobile) instala extensões sob emulação (QEMU).
 name: Deploy
 
 on:
@@ -26,10 +24,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PROJECT: mrk
+  PROJECT: portal-mrk
   ENVIRONMENT: prod
   # Máquina onde a stack roda (tag Servidor da EC2).
-  SERVIDOR: app
+  SERVIDOR: portal
 
 jobs:
   deploy:
