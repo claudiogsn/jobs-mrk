@@ -27,6 +27,10 @@ const jobMap = {
         const ontem = require('luxon').DateTime.now().setZone('America/Sao_Paulo').minus({ days: 1 }).toISODate();
         return require('../workers/workerTakeatSync').ProcessJobTakeatAll(ontem, ontem);
     },
+    ExecuteJobSaiposSync: async () => {
+        const ontem = require('luxon').DateTime.now().setZone('America/Sao_Paulo').minus({ days: 1 }).toISODate();
+        return require('../workers/workerSaiposSync').ProcessJobSaiposAll(ontem, ontem);
+    },
 
     // 🔧 Job de teste
     jobTesteLog: async () => {

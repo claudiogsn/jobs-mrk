@@ -38,6 +38,7 @@ const { ExecuteJobImportacao } = require('./workers/workerImportacaoExtrato');
 const { runSalesPipeline } = require('./workers/workerSalesPipeline');
 const { ExecuteJobFluxoEstoque } = require('./workers/workerFluxoEstoque');
 const { ProcessJobTakeatAll, ProcessStoreTakeat } = require('./workers/workerTakeatSync');
+const { ProcessJobSaiposAll, ProcessStoreSaipos } = require('./workers/workerSaiposSync');
 const {DateTime} = require("luxon");
 
 
@@ -975,6 +976,37 @@ router.post('/api/takeat/sync-all', async (req, res) => {
         res.json({ success: true, message: 'Varredura Takeat executada.', result });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Erro na varredura Takeat: ' + err.message });
+    }
+});
+
+// === Sincronização Saipos (PDV) ===
+router.post('/api/saipos/sync-store', async (req, res) => {
+    const { system_unit_id, data_inicio, data_fim } = req.body;
+    if (!system_unit_id || !data_inicio) {
+        return res.status(400).json({ success: false, message: 'system_unit_id e data_inicio são obrigatórios.' });
+    }
+    let conn;
+    try {
+        conn = await getConnection();
+        const dtFim = data_fim || data_inicio;
+        const result = await ProcessStoreSaipos(conn, Number(system_unit_id), data_inicio, dtFim);
+        res.json({ success: true, message: 'Sincronização Saipos concluída com sucesso.', result });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Erro na sincronização Saipos: ' + err.message });
+    } finally {
+        if (conn) await conn.end();
+    }
+});
+
+router.post('/api/saipos/sync-all', async (req, res) => {
+    const { data_inicio, data_fim } = req.body;
+    const dtInicio = data_inicio || DateTime.now().setZone('America/Sao_Paulo').minus({ days: 1 }).toISODate();
+    const dtFim = data_fim || dtInicio;
+    try {
+        const result = await ProcessJobSaiposAll(dtInicio, dtFim);
+        res.json({ success: true, message: 'Varredura Saipos executada.', result });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Erro na varredura Saipos: ' + err.message });
     }
 });
 
