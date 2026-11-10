@@ -60,6 +60,31 @@ function normalizePaymentMethodSaipos(descPagamento, smartposArr = [], tefArr = 
 }
 
 /**
+ * Código estável do meio de pagamento (api_pagamentos.id_m).
+ * A Saipos Data API só devolve a descrição do meio (desc_store_payment_type), sem id.
+ * O id_m é a chave do vínculo meio do PDV -> opção de recebimento e do agrupamento da
+ * Conferência de Caixa, então precisa ser o mesmo para todas as vendas do mesmo meio:
+ * hash FNV-1a (31 bits, cabe no INT) da descrição normalizada.
+ */
+function codigoMeioSaipos(descPagamento) {
+    const nome = String(descPagamento || 'OUTROS').trim().toUpperCase();
+    let h = 0x811c9dc5;
+    for (const byte of Buffer.from(nome, 'utf8')) {
+        h ^= byte;
+        h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return (h & 0x7fffffff) || 1;
+}
+
+/**
+ * Venda cancelada na Saipos: o campo canceled vem como 'Y' / 'N'.
+ */
+function vendaCanceladaSaipos(sale) {
+    const flag = String(sale?.canceled ?? '').trim().toUpperCase();
+    return ['Y', 'S', 'TRUE', '1'].includes(flag) || sale?.status === 'CANCELLED';
+}
+
+/**
  * Normaliza o tipo de venda Saipos para o modoVenda do MRK
  * 1: Entrega (Delivery) | 2: Retirada balcão | 3: Salão | 4: Ficha / Senha
  */
@@ -381,10 +406,12 @@ async function ProcessStoreSaipos(conn, systemUnitId, dataInicio, dataFim, unitN
                 const vlServico = parseFloat(sale.total_increase ?? totals.total_increase ?? 0);
                 const vlBruto = parseFloat(sale.total_amount_items ?? totals.total_amount_items ?? (vlTotalRecebido + vlDesconto));
                 const numPessoas = parseInt(sale.table_order?.customers_on_table || 1, 10);
-                const isCanceled = (sale.canceled === 'S' || sale.canceled === 'true' || sale.status === 'CANCELLED' || sale.deleted === 'S') ? 1 : 0;
+                const isCanceled = vendaCanceladaSaipos(sale) ? 1 : 0;
 
-                totalVendasCaixa++;
-                totalFaturado += vlTotalRecebido;
+                if (!isCanceled) {
+                    totalVendasCaixa++;
+                    totalFaturado += vlTotalRecebido;
+                }
 
                 // Registro para movimento_caixa
                 rowsMovCaixa.push([
@@ -407,7 +434,8 @@ async function ProcessStoreSaipos(conn, systemUnitId, dataInicio, dataFim, unitN
                     isCanceled
                 ]);
 
-                // Formas de pagamento
+                // Formas de pagamento (venda cancelada não entra na conferência)
+                if (isCanceled) continue;
                 const payments = Array.isArray(sale.payments) ? sale.payments : [];
                 let seq = 0;
                 for (const pay of payments) {
@@ -430,8 +458,8 @@ async function ProcessStoreSaipos(conn, systemUnitId, dataInicio, dataFim, unitN
                         'APROVADO',
                         shiftDate,
                         horaLancamento,
-                        String(idSale),
-                        (pay.desc_store_payment_type || 'OUTROS').slice(0, 100),
+                        codigoMeioSaipos(pay.desc_store_payment_type),
+                        (pay.desc_store_payment_type || 'OUTROS').trim().slice(0, 100),
                         shiftDate,
                         valorPago,
                         valorPago,
@@ -443,7 +471,8 @@ async function ProcessStoreSaipos(conn, systemUnitId, dataInicio, dataFim, unitN
                         norm.id_tipo,
                         norm.tipo_pagamento,
                         norm.bandeira,
-                        'SAIPOS'
+                        'SAIPOS',
+                        systemUnitId
                     ]);
                 }
             }
@@ -585,13 +614,24 @@ async function ProcessStoreSaipos(conn, systemUnitId, dataInicio, dataFim, unitN
             ], rowsMovCaixa);
         }
 
+        // Idempotência: o uuid do pagamento é novo a cada execução, então sem esta limpeza
+        // uma nova sincronização do mesmo período duplicaria os pagamentos.
+        if (importarFaturamento) {
+            await conn.execute(`
+                DELETE FROM api_pagamentos
+                WHERE (system_unit_id = ? OR id_loja = ?)
+                  AND data_contabil >= ? AND data_contabil <= ?
+                  AND origem = 'SAIPOS'
+            `, [systemUnitId, String(systemUnitId), dataInicio, dataFim]);
+        }
+
         if (rowsPagamentos.length > 0) {
             await batchInsert(conn, 'api_pagamentos', [
                 'uuid', 'id_operacao', 'id_loja', 'nome_loja', 'num_pedido', 'seq_pedido',
                 'data_contabil', 'status_pagamento', 'data_lancamento', 'hora_lancamento',
                 'id_m', 'descricao', 'data_vencimento', 'valor', 'valor_liquido',
                 'taxa_comissao', 'valor_comissao', 'nsu', 'adquirente', 'autorizacao',
-                'id_tipo', 'tipo_pagamento', 'bandeira', 'origem'
+                'id_tipo', 'tipo_pagamento', 'bandeira', 'origem', 'system_unit_id'
             ], rowsPagamentos);
         }
 
@@ -654,5 +694,7 @@ module.exports = {
     ProcessJobSaiposAll,
     ProcessStoreSaipos,
     normalizePaymentMethodSaipos,
-    normalizeModoVendaSaipos
+    normalizeModoVendaSaipos,
+    codigoMeioSaipos,
+    vendaCanceladaSaipos
 };
