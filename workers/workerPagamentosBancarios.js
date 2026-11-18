@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const axios = require('axios');
 const { log } = require('../utils/logger');
+const { sendWhatsappText } = require('../utils/utils');
 
 const ORIGEM = 'workerPagamentosBancarios';
 
@@ -18,16 +19,24 @@ async function ExecuteJobPagamentosBancarios() {
     }
 
     const url = new URL('pagamentos_bancarios.php', base).toString();
+    const headers = { 'X-MRK-Job-Secret': segredo };
     const { data } = await axios.post(
         url,
         { method: 'sincronizarPendentes', data: { limite: 200 } },
-        { headers: { 'X-MRK-Job-Secret': segredo }, timeout: 280000 }
+        { headers, timeout: 280000 }
     );
 
     if (!data?.success) {
         throw new Error(data?.message || 'O portal não concluiu a sincronização.');
     }
-    log(`Pagamentos consultados: ${data.consultados}. Alterados: ${data.alterados}.`, ORIGEM);
+    const alertas = Array.isArray(data.alertas) ? data.alertas : [];
+    for (const alerta of alertas) {
+        await sendWhatsappText(alerta.telefone, alerta.texto);
+    }
+    if (alertas.length > 0) {
+        await axios.post(url, { method: 'marcarAlertados', data: { ids: alertas.map((a) => a.id) } }, { headers, timeout: 30000 });
+    }
+    log(`Pagamentos consultados: ${data.consultados}. Alterados: ${data.alterados}. Alertas: ${alertas.length}.`, ORIGEM);
     return data;
 }
 
