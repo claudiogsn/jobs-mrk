@@ -21,6 +21,7 @@ const jobMap = {
     WorkerJobConferencia: require('../workers/workerPagamentos').WorkerJobConferencia,
     ExecuteJobSolicitacao: require( '../workers/workerSolicitacaoExtrato').ExecuteJobSolicitacao,
     ExecuteJobImportacao: require('../workers/workerImportacaoExtrato').ExecuteJobImportacao,
+    ExecuteJobPagamentosBancarios: require('../workers/workerPagamentosBancarios').ExecuteJobPagamentosBancarios,
     ExecuteJobIfoodSync: require('../workers/workerIfoodSync').ExecuteJobIfoodSync,
     ExecuteJob3lmEstoque: require('../workers/worker3lmEstoque').ExecuteJob3lmEstoque,
     ExecuteJobTakeatSync: async () => {
