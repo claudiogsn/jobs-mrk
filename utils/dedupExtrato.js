@@ -51,6 +51,45 @@ function removerDuplicadasEntreImportacoes(transacoes, idsJaGravados, existentes
     };
 }
 
+const MOTIVO_COPIA_PENDENTE = 'Possível duplicidade automática: lançamento pendente repetido pelo banco sem favorecido';
+
+/**
+ * Identifica a cópia que o banco envia na mesma resposta para um lançamento ainda pendente: mesma
+ * data, valor, tipo e descrição, com outro transactionId e sem o favorecido. A cópia é gravada como
+ * excluída, e não descartada, porque dois boletos legítimos iguais não têm como ser diferenciados
+ * com certeza: o operador pode restaurá-la na lista de excluídos do extrato.
+ *
+ * Os pares são formados um a um, então só sai o que tem correspondente com favorecido.
+ *
+ * @param {object[]} transacoes  lote vindo da API
+ * @returns {Set<string>} transactionIds das cópias
+ */
+function identificarCopiasPendentes(transacoes) {
+    const grupos = new Map();
+    const vistos = new Set();
+
+    for (const tx of transacoes) {
+        const id = String(tx.transactionId || '');
+        if (!id || vistos.has(id)) continue;
+        vistos.add(id);
+        if (String(tx.status || '').toUpperCase() !== 'PENDING') continue;
+
+        const descricao = String(tx.description || '').trim().replace(/\s+/g, ' ').toLowerCase();
+        const chave = `${chaveExtrato(tx.date, tx.amount, tipoDaTransacao(tx))}|${descricao}`;
+        if (!grupos.has(chave)) grupos.set(chave, { comFavorecido: 0, semFavorecido: [] });
+
+        const grupo = grupos.get(chave);
+        if (tx.participantReceiver) grupo.comFavorecido += 1;
+        else grupo.semFavorecido.push(id);
+    }
+
+    const copias = new Set();
+    for (const { comFavorecido, semFavorecido } of grupos.values()) {
+        semFavorecido.slice(0, comFavorecido).forEach(id => copias.add(id));
+    }
+    return copias;
+}
+
 async function filtrarDuplicadasEntreImportacoes(conn, systemUnitId, accountId, transacoes) {
     if (!transacoes || transacoes.length === 0) return { transacoes: [], ignoradas: 0 };
 
@@ -79,4 +118,10 @@ async function filtrarDuplicadasEntreImportacoes(conn, systemUnitId, accountId, 
     return removerDuplicadasEntreImportacoes(transacoes, idsJaGravados, existentes);
 }
 
-module.exports = { chaveExtrato, removerDuplicadasEntreImportacoes, filtrarDuplicadasEntreImportacoes };
+module.exports = {
+    MOTIVO_COPIA_PENDENTE,
+    chaveExtrato,
+    identificarCopiasPendentes,
+    removerDuplicadasEntreImportacoes,
+    filtrarDuplicadasEntreImportacoes,
+};

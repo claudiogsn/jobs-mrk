@@ -3,7 +3,11 @@ require('dotenv').config({ path: path.resolve('../.env') });
 const mysql = require('mysql2/promise');
 const { log } = require('../utils/logger');
 const { callTecnoSpeed } = require('../utils/utils'); // <--- Importando nosso wrapper
-const { filtrarDuplicadasEntreImportacoes } = require('../utils/dedupExtrato');
+const {
+    MOTIVO_COPIA_PENDENTE,
+    filtrarDuplicadasEntreImportacoes,
+    identificarCopiasPendentes,
+} = require('../utils/dedupExtrato');
 
 const CHUNK_SIZE = 500;
 const API_URL = process.env.TECNOSPEED_API_URL || 'https://api.pagamentobancario.com.br';
@@ -16,7 +20,7 @@ function chunkArray(array, size) {
     return result;
 }
 
-async function salvarTransacoes(conn, transactions, systemUnitId, accountId) {
+async function salvarTransacoes(conn, transactions, systemUnitId, accountId, copiasPendentes = new Set()) {
     if (!transactions || transactions.length === 0) return 0;
 
     const rows = [];
@@ -31,6 +35,8 @@ async function salvarTransacoes(conn, transactions, systemUnitId, accountId) {
         if (!transactionId || seenTxIds.has(transactionId)) continue;
         seenTxIds.add(transactionId);
 
+        const copia = copiasPendentes.has(String(transactionId));
+
         rows.push([
             systemUnitId,
             accountId,
@@ -39,14 +45,19 @@ async function salvarTransacoes(conn, transactions, systemUnitId, accountId) {
             tx.description || 'Movimentação',
             tx.amount || 0,
             tx.date,
-            JSON.stringify(tx)
+            JSON.stringify(tx),
+            copia ? 1 : 0,
+            copia ? mysql.raw('NOW()') : null,
+            copia ? 'sistema' : null,
+            copia ? MOTIVO_COPIA_PENDENTE : null
         ]);
     }
 
     if (rows.length > 0) {
         const sql = `
             INSERT INTO pluggy_transactions (
-                system_unit_id, account_id, pluggy_transaction_id, type, description, amount, date, raw_data
+                system_unit_id, account_id, pluggy_transaction_id, type, description, amount, date, raw_data,
+                is_ignored, ignored_at, ignored_user, ignored_motivo
             ) VALUES ?
             ON DUPLICATE KEY UPDATE
                 type = VALUES(type),
@@ -131,7 +142,15 @@ async function ExecuteJobImportacao() {
                         log(`    ♻️  ${ignoradas} transação(ões) duplicada(s) de outra importação ignorada(s).`, 'workerImportacao');
                     }
 
-                    const savedQtd = await salvarTransacoes(conn, transacoes, importTask.system_unit_id, importTask.account_id);
+                    // A cópia entra já excluída e pode ser restaurada; numa nova sincronização a exclusão é mantida
+                    const copiasPendentes = identificarCopiasPendentes(recebidas);
+                    if (copiasPendentes.size > 0) {
+                        log(`    🔁 ${copiasPendentes.size} cópia(s) de lançamento pendente identificada(s) no lote.`, 'workerImportacao');
+                    }
+
+                    const savedQtd = await salvarTransacoes(
+                        conn, transacoes, importTask.system_unit_id, importTask.account_id, copiasPendentes
+                    );
 
                     await conn.execute(`
                         UPDATE pluggy_statement_imports
@@ -160,5 +179,5 @@ async function ExecuteJobImportacao() {
     }
 }
 
-module.exports = { ExecuteJobImportacao };
+module.exports = { ExecuteJobImportacao, salvarTransacoes };
 if (require.main === module) { ExecuteJobImportacao(); }
