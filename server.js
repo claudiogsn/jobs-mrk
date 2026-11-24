@@ -173,6 +173,33 @@ router.post('/api/extratos/sincronizar', async (req, res) => {
     }
 });
 
+// MrkSync: compara as vendas montadas da réplica do PDV com o que a API do Menew gravou (não grava nada).
+// GET /api/mrksync/comparar?unit=4&inicio=2026-11-20&fim=2026-11-22 (sem datas: ontem). Sem unit: lista as lojas.
+router.get('/api/mrksync/comparar', async (req, res) => {
+    const { compararUnidade } = require('./workers/workerMrkSyncComparador');
+    const { unidadesComMrkSync, diaMais } = require('./mrksync/replica');
+    const valido = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || ''));
+    try {
+        if (!req.query.unit) {
+            const conn = await getConnection();
+            try {
+                return res.json({ lojas: await unidadesComMrkSync(conn) });
+            } finally {
+                conn.end();
+            }
+        }
+        const ontem = diaMais(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }), -1);
+        const fim = valido(req.query.fim) ? req.query.fim : ontem;
+        const inicio = valido(req.query.inicio) ? req.query.inicio : fim;
+        if (inicio > fim) return res.status(400).json({ error: 'inicio depois de fim.' });
+        if ((new Date(fim) - new Date(inicio)) / 86400000 > 31) return res.status(400).json({ error: 'Período máximo de 31 dias.' });
+        res.json(await compararUnidade(Number(req.query.unit), inicio, fim));
+    } catch (err) {
+        logger.error(err, { rota: '/api/mrksync/comparar' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.get('/api/analise-menew/unidades', async (req, res) => {
     try {
         const conn = await getConnection();
