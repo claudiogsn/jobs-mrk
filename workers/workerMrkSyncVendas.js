@@ -3,7 +3,8 @@
 // Roda a cada 5 minutos para ontem e hoje (o dia contábil passa da meia-noite). Os jobs da API pulam essas lojas
 // (mrksync/fonte.js). A consolidação (_bi_sales, 04:00) e a baixa de estoque (04:30) seguem lendo o sales.
 //
-// Também avisa quando a réplica de uma loja parou (etapa 5): sem lote há mais de 30 minutos entre 10h e 23h59.
+// Também avisa quando o MrkSync de uma loja parou no meio do dia (etapa 5): o computador mandou sinal hoje depois
+// das 10h e está há mais de 30 minutos sem mandar. Loja fechada com o computador desligado não gera aviso.
 // Plano e regras: docs/mrksync-vendas.md.
 
 require('dotenv').config();
@@ -23,7 +24,9 @@ async function lojasMrkSync(conn) {
         const [rows] = await conn.query(`
             SELECT su.id, su.name AS nome, su.custom_code,
                    MAX(m.ultima_replica_em) AS ultima_replica_em,
-                   MAX(m.ultima_replica_em) >= NOW() - INTERVAL 30 MINUTE AS replica_recente
+                   -- ultimo_contato_em (heartbeat) é gravado em UTC; o horário de Brasília é UTC-3
+                   MAX(m.ultimo_contato_em) >= UTC_TIMESTAMP() - INTERVAL 30 MINUTE AS contato_recente,
+                   MAX(m.ultimo_contato_em) - INTERVAL 3 HOUR >= CONCAT(CURDATE(), ' 10:00:00') AS ligada_hoje
             FROM system_unit su
             LEFT JOIN agentes_maquinas m ON m.system_unit_id = su.id AND m.revogado_em IS NULL
             WHERE su.menew_fonte_vendas = 'mrksync'
@@ -42,7 +45,7 @@ async function alertarReplicaParada(loja) {
     if (agora - (ultimoAlerta.get(loja.id) || 0) < 3600 * 1000) return false;
     ultimoAlerta.set(loja.id, agora);
     const desde = loja.ultima_replica_em ? new Date(loja.ultima_replica_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'nunca';
-    const texto = `⚠️ MrkSync: ${loja.nome} sem enviar vendas desde ${desde}. O faturamento da loja não está atualizando. Confira o computador da loja.`;
+    const texto = `⚠️ MrkSync: o computador da ${loja.nome} parou de responder (última venda recebida: ${desde}). O faturamento da loja pode não estar atualizando. Confira o computador da loja.`;
     log(texto, ORIGEM);
     const destino = process.env.MRKSYNC_ALERTA_WHATSAPP;
     if (destino) {
@@ -86,7 +89,7 @@ async function ExecuteJobMrkSyncVendas(dtInicio, dtFim) {
                 log(`❌ ${loja.nome}: sem código Menew (custom_code).`, ORIGEM);
                 continue;
             }
-            if (!Number(loja.replica_recente) && hora >= 10) await alertarReplicaParada(loja);
+            if (Number(loja.ligada_hoje) && !Number(loja.contato_recente) && hora >= 10) await alertarReplicaParada(loja);
             try {
                 resumo.push({ loja: loja.id, nome: loja.nome, ...(await processarLoja(conn, loja, inicio, fim)) });
             } catch (err) {
