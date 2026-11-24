@@ -20,6 +20,7 @@ const jobMap = {
     ExecuteJobTelemetria: require('../workers/workerTelemetria').ExecuteJobTelemetria,
     WorkerJobConferencia: require('../workers/workerPagamentos').WorkerJobConferencia,
     ExecuteJobMrkSyncComparador: require('../workers/workerMrkSyncComparador').ExecuteJobMrkSyncComparador,
+    ExecuteJobMrkSyncVendas: require('../workers/workerMrkSyncVendas').ExecuteJobMrkSyncVendas,
     ExecuteJobSolicitacao: require( '../workers/workerSolicitacaoExtrato').ExecuteJobSolicitacao,
     ExecuteJobImportacao: require('../workers/workerImportacaoExtrato').ExecuteJobImportacao,
     ExecuteJobPagamentosBancarios: require('../workers/workerPagamentosBancarios').ExecuteJobPagamentosBancarios,

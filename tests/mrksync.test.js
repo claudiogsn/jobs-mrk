@@ -183,3 +183,88 @@ test('comparar: nota que só existe na réplica (itens da API ainda não importa
     assert.equal(rel.porDia[0].produtos_diferentes, 3);
     assert.equal(rel.porDia[0].igual, false);
 });
+
+// Carrega mrksync/fonte.js com o banco simulado (o require de ../utils/utils e ../utils/logger é trocado).
+function fonteComBanco(resultado) {
+    const path = require('node:path');
+    const utils = path.resolve(__dirname, '../utils/utils.js');
+    const logger = path.resolve(__dirname, '../utils/logger.js');
+    const fonte = path.resolve(__dirname, '../mrksync/fonte.js');
+    const pulados = [];
+    require.cache[utils] = { id: utils, filename: utils, loaded: true, exports: { getConnection: async () => ({ query: async () => { if (resultado instanceof Error) throw resultado; return [resultado]; }, end() {} }) } };
+    require.cache[logger] = { id: logger, filename: logger, loaded: true, exports: { log: (m) => pulados.push(m) } };
+    delete require.cache[fonte];
+    const mod = require(fonte);
+    delete require.cache[utils];
+    delete require.cache[logger];
+    delete require.cache[fonte];
+    return { mod, pulados };
+}
+
+test('fonte das vendas: jobs da API pulam as lojas em MrkSync', async () => {
+    const { mod, pulados } = fonteComBanco([{ id: 4 }]);
+    const lojas = [{ system_unit_id: 3, name: 'Pituba' }, { system_unit_id: 4, name: 'Barra' }, { id: 5, name: 'Rio Vermelho' }];
+    const fica = await mod.semLojasMrkSync(lojas, 'teste');
+    assert.deepEqual(fica.map((l) => l.name), ['Pituba', 'Rio Vermelho']);
+    assert.equal(pulados.length, 1);
+});
+
+test('fonte das vendas: sem a coluna no banco, nenhuma loja sai da API', async () => {
+    const erro = Object.assign(new Error("Unknown column 'menew_fonte_vendas'"), { code: 'ER_BAD_FIELD_ERROR' });
+    const { mod } = fonteComBanco(erro);
+    const lojas = [{ system_unit_id: 4, name: 'Barra' }];
+    assert.deepEqual(await mod.semLojasMrkSync(lojas, 'teste'), lojas);
+});
+
+// Conexão falsa para o gravador: responde aos SELECTs com o que "está no banco" e registra o resto.
+function conexaoFalsa({ caixaNoBanco = [], itensNoBanco = [], falharEm = null } = {}) {
+    const log = [];
+    return {
+        log,
+        async beginTransaction() { log.push('BEGIN'); },
+        async commit() { log.push('COMMIT'); },
+        async rollback() { log.push('ROLLBACK'); },
+        async query(sql, params) {
+            log.push({ sql, params });
+            if (falharEm && sql.includes(falharEm)) throw new Error('falha simulada');
+            if (sql.startsWith('SELECT CONCAT(num_controle')) return [caixaNoBanco.map((k) => ({ k }))];
+            if (sql.startsWith('SELECT idItemVenda')) return [itensNoBanco.map((idItemVenda) => ({ idItemVenda }))];
+            if (sql.startsWith('DELETE FROM api_pagamentos')) return [{ affectedRows: 5 }];
+            return [{ affectedRows: 1 }];
+        },
+    };
+}
+
+test('gravar: atualiza pelas chaves da API e apaga só o que sumiu da réplica', async () => {
+    const { gravarVendas } = require('../mrksync/gravar');
+    const sync = montarVendas({ unidade, ...replica });
+    const conn = conexaoFalsa({
+        caixaNoBanco: ['84254|2026-11-15', '84300|2026-11-15', '84111|2026-11-15'],
+        itensNoBanco: ['2645969931900188' + '80150', '26459699318000880150'],
+    });
+    const r = await gravarVendas(conn, unidade, sync, '2026-11-15', '2026-11-15');
+    assert.equal(r.caixa_removidas, 1);
+    assert.equal(r.itens_removidos, 1);
+    assert.equal(r.pagamentos_substituidos, 5);
+    assert.equal(conn.log[0], 'BEGIN');
+    assert.equal(conn.log[conn.log.length - 1], 'COMMIT');
+    const sqls = conn.log.filter((x) => typeof x === 'object');
+    const delCaixa = sqls.find((x) => x.sql.startsWith('DELETE FROM movimento_caixa'));
+    assert.deepEqual(delCaixa.params, ['84111|2026-11-15']);
+    const delItens = sqls.find((x) => x.sql.startsWith('DELETE FROM sales'));
+    assert.deepEqual(delItens.params, ['26459699318000880150']);
+    const insCaixa = sqls.find((x) => x.sql.startsWith('INSERT INTO movimento_caixa'));
+    assert.match(insCaixa.sql, /ON DUPLICATE KEY UPDATE/);
+    assert.doesNotMatch(insCaixa.sql.split('ON DUPLICATE KEY UPDATE')[1], /`id` =|`lojaId` =|`num_controle` =/);
+    const insPag = sqls.find((x) => x.sql.startsWith('INSERT INTO api_pagamentos'));
+    assert.equal(insPag.params.length, 3 * 29);
+});
+
+test('gravar: erro no meio desfaz tudo', async () => {
+    const { gravarVendas } = require('../mrksync/gravar');
+    const sync = montarVendas({ unidade, ...replica });
+    const conn = conexaoFalsa({ falharEm: 'INSERT INTO sales' });
+    await assert.rejects(() => gravarVendas(conn, unidade, sync, '2026-11-15', '2026-11-15'), /falha simulada/);
+    assert.equal(conn.log[conn.log.length - 1], 'ROLLBACK');
+    assert.ok(!conn.log.includes('COMMIT'));
+});

@@ -17,7 +17,8 @@
     "worker:caixa": "node workers/workerMovimentoCaixa.js",
     "test:faturamento": "node --test tests/faturamento.test.js",
     "test:mrksync": "node --test tests/mrksync.test.js",
-    "worker:mrksync-comparador": "node workers/workerMrkSyncComparador.js"
+    "worker:mrksync-comparador": "node workers/workerMrkSyncComparador.js",
+    "worker:mrksync-vendas": "node workers/workerMrkSyncVendas.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1161.0",

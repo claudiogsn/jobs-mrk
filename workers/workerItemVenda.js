@@ -21,7 +21,9 @@ async function processItemVenda({ group_id, dt_inicio, dt_fim } = {}) {
     const dtinicio = dt_inicio ?? DateTime.now().minus({ days: 1 }).toISODate();
     const dtfim = dt_fim ?? dtinicio;
 
-    const unidades = await callPHP('getUnitsByGroup', { group_id: groupId });
+    let unidades = await callPHP('getUnitsByGroup', { group_id: groupId });
+    // Lojas com "Fonte das vendas" = MrkSync não passam pela API do Menew.
+    if (Array.isArray(unidades)) unidades = await require('../mrksync/fonte').semLojasMrkSync(unidades, 'workerItemVenda');
 
     if (!Array.isArray(unidades) || unidades.length === 0) {
         log('⚠️ Nenhuma unidade encontrada.', 'workerItemVenda');

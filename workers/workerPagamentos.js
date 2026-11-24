@@ -285,6 +285,9 @@ async function ExecuteJobConferencia({ group_id, data } = {}) {
             unidades = rows;
         }
 
+        // Lojas com "Fonte das vendas" = MrkSync não passam pela API do Menew.
+        unidades = await require('../mrksync/fonte').semLojasMrkSync(unidades, 'workerConferencia');
+
         if (unidades.length === 0) {
             log('⚠️ Nenhuma unidade encontrada.', 'workerConferencia');
             return;

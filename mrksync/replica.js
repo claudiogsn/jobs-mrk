@@ -1,9 +1,8 @@
 // Leitura no banco para o MrkSync: a réplica do PDV de uma loja num período (tabelas integracao_menew_*, uma linha
 // do Firebird em `dados`) e o que a API do Menew gravou no mesmo período. Só faz SELECT.
 //
-// As tabelas da réplica não têm índice pela data de movimento: o filtro por DT_MOV varre as linhas da loja
-// (índice por contratante e loja). Serve para o comparador diário; o worker que grava (etapa 3) vai precisar de
-// uma coluna gerada com índice.
+// Com a migration 000035 do mrk-core, as tabelas têm colunas geradas com índice (replica_dt_mov,
+// replica_num_controle, replica_numero_nfc). Sem elas, cai no filtro pelo JSON, que varre as linhas da loja.
 
 const parse = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
 
@@ -33,29 +32,61 @@ async function unidade(conn, unitId) {
     return rows[0] || null;
 }
 
+let comIndice = null;
+/** A migration 000035 (colunas geradas com índice) já está no banco? */
+async function temIndice(conn) {
+    if (comIndice !== null) return comIndice;
+    const [rows] = await conn.query(
+        `SELECT COUNT(*) AS n FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'integracao_menew_tbnfce_itens' AND COLUMN_NAME = 'replica_numero_nfc'`
+    );
+    comIndice = Number(rows[0].n) > 0;
+    return comIndice;
+}
+
+/** Linhas cuja coluna está numa lista, em lotes (IN com muitos valores). */
+async function linhasEm(conn, tabela, unitId, coluna, valores) {
+    const out = [];
+    for (let i = 0; i < valores.length; i += 500) {
+        const lote = valores.slice(i, i + 500);
+        out.push(...(await linhas(conn, tabela, unitId, `${coluna} IN (${lote.map(() => '?').join(',')})`, lote)));
+    }
+    return out;
+}
+
 /** Réplica de [inicio, fim] (AAAA-MM-DD), no formato que montarVendas espera. */
 async function lerReplica(conn, unitId, inicio, fim) {
-    const porDtMov = "dados->>'$.DT_MOV' BETWEEN ? AND ?";
-    const faixa = [inicio, `${fim}T23:59:59`];
-    // Em série: em paralelo, várias varreduras grandes ao mesmo tempo pesam no RDS.
+    const indice = await temIndice(conn);
+    const porDtMov = indice ? 'replica_dt_mov BETWEEN ? AND ?' : "dados->>'$.DT_MOV' BETWEEN ? AND ?";
+    const faixa = indice ? [inicio, fim] : [inicio, `${fim}T23:59:59`];
+    // Em série: em paralelo, várias leituras grandes ao mesmo tempo pesam no RDS.
     const contas = await linhas(conn, 'tbcabconta', unitId, porDtMov, faixa);
     const itens = await linhas(conn, 'tbdetconta', unitId, porDtMov, faixa);
     const pagamentos = await linhas(conn, 'tbpagconta', unitId, porDtMov, faixa);
 
-    // A nota pode sair no dia seguinte ao movimento (conta fechada depois da meia-noite).
     const contasSet = new Set(contas.map((c) => Number(c.NUM_CONTROLE)));
-    const notas = (await linhas(conn, 'tbnfce', unitId, "dados->>'$.DATA_EMISSAO' BETWEEN ? AND ?", [
-        diaMais(inicio, -1),
-        `${diaMais(fim, 2)}T23:59:59`,
-    ])).filter((n) => contasSet.has(Number(n.NUM_CONTROLE)));
+    let notas;
+    if (indice) {
+        notas = await linhasEm(conn, 'tbnfce', unitId, 'replica_num_controle', [...contasSet].map(String));
+    } else {
+        // A nota pode sair no dia seguinte ao movimento (conta fechada depois da meia-noite).
+        notas = (await linhas(conn, 'tbnfce', unitId, "dados->>'$.DATA_EMISSAO' BETWEEN ? AND ?", [
+            diaMais(inicio, -1),
+            `${diaMais(fim, 2)}T23:59:59`,
+        ])).filter((n) => contasSet.has(Number(n.NUM_CONTROLE)));
+    }
 
     let itensNota = [];
     if (notas.length) {
-        const numeros = notas.map((n) => Number(n.NUMERO_NFC));
-        const min = Math.min(...numeros), max = Math.max(...numeros);
+        const numeros = [...new Set(notas.map((n) => Number(n.NUMERO_NFC)))];
         const set = new Set(numeros);
-        itensNota = (await linhas(conn, 'tbnfce_itens', unitId, "CAST(dados->>'$.NUMERO_NFC' AS UNSIGNED) BETWEEN ? AND ?", [min, max]))
-            .filter((i) => set.has(Number(i.NUMERO_NFC)));
+        if (indice) {
+            itensNota = await linhasEm(conn, 'tbnfce_itens', unitId, 'replica_numero_nfc', numeros.map(String));
+        } else {
+            const min = Math.min(...numeros), max = Math.max(...numeros);
+            itensNota = await linhas(conn, 'tbnfce_itens', unitId, "CAST(dados->>'$.NUMERO_NFC' AS UNSIGNED) BETWEEN ? AND ?", [min, max]);
+        }
+        itensNota = itensNota.filter((i) => set.has(Number(i.NUMERO_NFC)));
     }
 
     const operadores = await linhas(conn, 'tbope', unitId);
